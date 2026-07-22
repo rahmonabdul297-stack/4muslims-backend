@@ -1,11 +1,14 @@
-import type { Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import {
   OtpTemplate,
   resetPasswordTemplate,
+  signinMailTemplate,
   updatedPasswordTemplate,
 } from "../templates/globalEmailTemplates/auth/resetpasswordtemp.ts";
 import { sendEmail } from "../utils/sendemail.utils.ts";
+import { User } from "../models/User.ts";
+import { sendSMS } from "../utils/sendsms.utils.ts";
 
 export const sendResetPasswordMail = async (req: Request, res: Response) => {
   const FRONTEND_URL = process.env.FRONTEND_URL;
@@ -29,25 +32,7 @@ export const sendResetPasswordMail = async (req: Request, res: Response) => {
   }
 };
 
-export const sendOtpMail = async (req: Request, res: Response) => {
-  const { user, token } = req.body;
-  const send_to = user.email;
-  const fullName = user.name.split(" ")[0];
 
-  try {
-    const subject = `Dear ${fullName}, reset your password`;
-    const message = OtpTemplate(fullName, token);
-    await sendEmail({ subject, message, send_to });
-    return sendSuccessResponse(
-      res,
-      "Your OTP has been sent to the provided email!",
-      user,
-    );
-  } catch (error) {
-    console.log((error as Error).message);
-    return sendErrorResponse(res, (error as Error).message);
-  }
-};
 
 export const sendUpdatedPasswordMail = async (req: Request, res: Response) => {
   const { user } = req.body;
@@ -63,6 +48,21 @@ export const sendUpdatedPasswordMail = async (req: Request, res: Response) => {
       "successfully reset your password, Thank you!.",
       user,
     );
+  } catch (error) {
+    console.log((error as Error).message);
+    return sendErrorResponse(res, (error as Error).message);
+  }
+};
+
+export const sendSigninMail = async (req: Request, res: Response) => {
+  const { exsitingUser } = req.body;
+  const send_to = exsitingUser.email;
+  const fullName = exsitingUser.name.split(" ")[0];
+  try {
+    const subject = `Dear ${fullName}, You have successfully sign-in into your Account! `;
+    const message = signinMailTemplate(fullName);
+    await sendEmail({ subject, message, send_to });
+    return sendSuccessResponse(res, "successfully!", exsitingUser);
   } catch (error) {
     console.log((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);

@@ -1,8 +1,13 @@
+import type { IAddress } from "./address.types.ts";
+
 export interface UserTypes {
   name: string;
   username: string;
   email: string;
+  phone: string;
   password: string;
+  profileImage?: string;
+  addresses?: IAddress[];
   bio?: string;
   DOB?: string;
   date?: Date;
@@ -13,6 +18,18 @@ export interface TokenPayloadTypes {
 }
 export interface resetPasswordTokenTypes {
   owner: string;
-  token: string;
+  token?: string;
+  OTP?: string;
   createdAt: Date;
+}
+
+export interface signinOtpTypes {
+  owner: string;
+  token?: string;
+  OTP?: string;
+  createdAt: Date;
+}
+export interface CustomTokenPayload {
+  id: string;
+  sessionType: "initial" | "extended";
 }

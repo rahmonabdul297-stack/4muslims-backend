@@ -5,28 +5,38 @@ import { Validate } from "../../middlewares/validate.ts";
 import {
   validateExistingUser,
   validateNewUser,
+  validateResetOTP,
   validateResetPassToken,
 } from "../../middlewares/user.ts";
 
 import {
-  CheckSession,
+  getMe,
   resetUserPassword,
   signIn,
+  signOut,
   signUp,
   userForgotPassword,
-  userForgotPasswordOTP,
+  userForgotPasswordOtp,
 } from "../../controllers/user/user-auth-controller.ts";
 import {
   ValidateNewUserDetails,
   ValidatePassword,
   ValidatePasswordReset,
+  ValidatePhone,
   ValidateSigninDetails,
 } from "../../middlewares/Validators.ts";
 import {
-  sendOtpMail,
   sendResetPasswordMail,
+  sendSigninMail,
   sendUpdatedPasswordMail,
 } from "../../services/email-services.ts";
+import { sendOtpSMS } from "../../services/otp-services.ts";
+import {
+  CheckSession,
+  refreshSession,
+  verifyUsersigninToken,
+} from "../../utils/helper.ts";
+
 const router = Router();
 
 router.post(
@@ -42,8 +52,12 @@ router.post(
   Validate,
   validateExistingUser,
   signIn,
+  sendSigninMail,
 );
+router.get("/me", verifyUsersigninToken, getMe);
+router.post("/sign-out", verifyUsersigninToken, signOut);
 router.get("/check-session", CheckSession);
+router.post("/refresh", refreshSession);
 router.post(
   "/forgot-password",
   ValidatePassword,
@@ -52,20 +66,28 @@ router.post(
   sendResetPasswordMail,
 );
 router.post(
-  "/send-otp",
-  ValidatePassword,
+  "/SMS/forgot-password",
+  ValidatePhone,
   Validate,
-  userForgotPasswordOTP,
-  sendOtpMail,
+  userForgotPasswordOtp,
+  sendOtpSMS,
 );
 
 router.put(
   "/reset-password",
-  ValidatePasswordReset,
+  ValidatePhone,
   Validate,
   validateResetPassToken,
   resetUserPassword,
   sendUpdatedPasswordMail,
 );
+// router.put(
+//   "/OTP/reset-password",
+//   ValidatePasswordandPhone,
+//   Validate,
+//   validateResetOTP,
+//   resetUserPassword,
+//   sendUpdatedPasswordMail,
+// );
 
 export default router;

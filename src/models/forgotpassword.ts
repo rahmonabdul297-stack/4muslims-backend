@@ -7,8 +7,10 @@ const resetForgetPasswordTokenSchema = new Schema<resetPasswordTokenTypes>({
   },
   token: {
     type: String,
-    required: true,
 
+  },
+  OTP:{
+     type: String,
   },
   createdAt: {
     type: Date,
