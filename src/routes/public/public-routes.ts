@@ -23,7 +23,7 @@ import {
 
 const router = Router();
 
-router.get("/", getCart);
+router.get("/getCart", getCart);
 
 router.post("/items", verifyUsersigninToken, validateAddToCart, addToCart);
 

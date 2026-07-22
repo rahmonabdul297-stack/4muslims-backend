@@ -8,7 +8,7 @@ import paymentRoutes from './routes/payment/payment-route.ts';
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = 9000;
+const PORT = 8000;
 
 // middleware
 
