@@ -1,19 +1,18 @@
 import nodemailer from "nodemailer";
 import type { sendEmailType } from "../types/global-type.ts";
 
-
 export const sendEmail = ({ subject, message, send_to }: sendEmailType) => {
   const EMAIL_HOST = process.env.EMAIL_HOST;
-  const EMAIL_PORT = process.env.EMAIL_PORT ;
+  const EMAIL_PORT = process.env.EMAIL_PORT;
   const EMAIL_USER = process.env.EMAIL_USER;
   const EMAIL_PASS = process.env.EMAIL_PASS;
   const transporter = nodemailer.createTransport({
-    host:EMAIL_HOST,
-    port:EMAIL_PORT,
+    host: EMAIL_HOST,
+    port: EMAIL_PORT,
     secure: false,
     auth: {
-      user:EMAIL_USER,
-      pass:EMAIL_PASS,
+      user: EMAIL_USER,
+      pass: EMAIL_PASS,
     },
     tls: {
       rejectUnauthorized: false,
@@ -21,9 +20,9 @@ export const sendEmail = ({ subject, message, send_to }: sendEmailType) => {
   } as any);
 
   const mailOptions: any = {
-    from:EMAIL_HOST,
+    from: EMAIL_HOST,
     to: send_to,
-    reply_to:EMAIL_HOST,
+    reply_to: EMAIL_HOST,
     subject,
     html: message,
   };
@@ -35,5 +34,3 @@ export const sendEmail = ({ subject, message, send_to }: sendEmailType) => {
     console.log("result:", result.messageId);
   });
 };
-
-

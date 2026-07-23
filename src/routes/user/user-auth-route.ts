@@ -75,7 +75,7 @@ router.post(
 
 router.put(
   "/reset-password",
-  ValidatePhone,
+  ValidatePasswordReset,
   Validate,
   validateResetPassToken,
   resetUserPassword,
