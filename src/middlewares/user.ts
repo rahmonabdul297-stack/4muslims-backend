@@ -9,7 +9,7 @@ const validateNewUser = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const { username, email,phone } = req.body;
+  const { username, email, phone } = req.body;
   var ItExisting;
   try {
     ItExisting = await User.findOne({ email: email.toLowerCase() });
@@ -25,11 +25,14 @@ const validateNewUser = async (
     if (ItExisting) {
       return sendErrorResponse(res, "username is not available");
     }
-      ItExisting = await User.findOne({
+    ItExisting = await User.findOne({
       phone: phone,
     });
-        if (ItExisting) {
-      return sendErrorResponse(res, "The phone number already exist, try to sign-in instead!");
+    if (ItExisting) {
+      return sendErrorResponse(
+        res,
+        "The phone number already exist, try to sign-in instead!",
+      );
     }
 
     req.body.email = email.toLowerCase();
@@ -101,7 +104,7 @@ const validateResetOTP = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const { email, OTP } = req.body;
+  const { phone, OTP } = req.body;
   if (!OTP) {
     return sendErrorResponse(res, "Enter your OTP!");
   }
@@ -111,7 +114,7 @@ const validateResetOTP = async (
   if (!isOtpExist) {
     return sendErrorResponse(res, "OTP doesn't exist!");
   }
-  const user = await User.findOne({ email: email });
+  const user = await User.findOne({ phone: phone });
   if (!user) {
     return sendErrorResponse(res, "User doesn't exist!");
   }

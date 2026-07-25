@@ -10,11 +10,11 @@ export const sendOtpSMS = async (req: Request, res: Response) => {
     ${OTP}
     \n Do not share your OTP with anyone!`;
   try {
-    await sendSMS(to,body);
+    await sendSMS(to, body);
     return sendSuccessResponse(
       res,
       "Your OTP has been sent to the provided phone number!",
-      user,
+      OTP,
     );
   } catch (error) {
     console.log((error as Error).message);

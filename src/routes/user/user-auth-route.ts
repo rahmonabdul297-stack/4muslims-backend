@@ -20,6 +20,7 @@ import {
 } from "../../controllers/user/user-auth-controller.ts";
 import {
   ValidateNewUserDetails,
+  ValidateOTP,
   ValidatePassword,
   ValidatePasswordReset,
   ValidatePhone,
@@ -54,7 +55,7 @@ router.post(
   signIn,
   sendSigninMail,
 );
-router.get("/me", verifyUsersigninToken, getMe);
+
 router.post("/sign-out", verifyUsersigninToken, signOut);
 router.get("/check-session", CheckSession);
 router.post("/refresh", refreshSession);
@@ -81,13 +82,13 @@ router.put(
   resetUserPassword,
   sendUpdatedPasswordMail,
 );
-// router.put(
-//   "/OTP/reset-password",
-//   ValidatePasswordandPhone,
-//   Validate,
-//   validateResetOTP,
-//   resetUserPassword,
-//   sendUpdatedPasswordMail,
-// );
+router.put(
+  "/OTP/reset-password",
+  ValidateOTP,
+  Validate,
+  validateResetOTP,
+  resetUserPassword,
+  sendUpdatedPasswordMail,
+);
 
 export default router;

@@ -8,8 +8,9 @@ import fileUpload from "../../multer.ts";
 import { verifyUsersigninToken } from "../../utils/helper.ts";
 import { addAddress, deleteAddress, getAddresses, setDefaultAddress, updateAddress } from "../../controllers/user/address.ts";
 import { validateAddAddress, validateAddressIdParam, validateUpdateAddress } from "../../middlewares/Validators.ts";
+import { getMe } from "../../controllers/user/user-auth-controller.ts";
 const router = Router();
-router.get("/user-profile", verifyUsersigninToken, getUserProfile);
+router.get("/me", verifyUsersigninToken, getMe);
 router.put(
   "/update-profile",
   verifyUsersigninToken,
@@ -28,6 +29,6 @@ router.put("/address/:addressId", validateUpdateAddress, verifyUsersigninToken, 
 router.delete("/address/:addressId", validateAddressIdParam, verifyUsersigninToken,deleteAddress);
 
 // PATCH /api/v1/users/addresses/:addressId/default - Set an address as default
-router.patch("/address:addressId/default", validateAddressIdParam,verifyUsersigninToken, setDefaultAddress);
+router.patch("/address/:addressId/default", validateAddressIdParam,verifyUsersigninToken, setDefaultAddress);
 
 export default router;

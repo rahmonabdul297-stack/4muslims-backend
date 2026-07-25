@@ -23,7 +23,7 @@ import {
 
 const router = Router();
 
-router.get("/getCart", getCart);
+router.get("/getCart", verifyUsersigninToken, getCart);
 
 router.post("/items", verifyUsersigninToken, validateAddToCart, addToCart);
 
@@ -56,7 +56,5 @@ router.patch(
   validateOrderIdParam,
   cancelOrder,
 );
-
-
 
 export default router;
