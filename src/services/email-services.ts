@@ -5,6 +5,7 @@ import {
   resetPasswordTemplate,
   signinMailTemplate,
   updatedPasswordTemplate,
+  verifyEmailAddressMailTemplate,
 } from "../templates/globalEmailTemplates/auth/resetpasswordtemp.ts";
 import { sendEmail } from "../utils/sendemail.utils.ts";
 import { User } from "../models/User.ts";
@@ -31,8 +32,6 @@ export const sendResetPasswordMail = async (req: Request, res: Response) => {
     return sendErrorResponse(res, (error as Error).message);
   }
 };
-
-
 
 export const sendUpdatedPasswordMail = async (req: Request, res: Response) => {
   const { user } = req.body;
@@ -63,6 +62,25 @@ export const sendSigninMail = async (req: Request, res: Response) => {
     const message = signinMailTemplate(fullName);
     await sendEmail({ subject, message, send_to });
     return sendSuccessResponse(res, "successfully!", exsitingUser);
+  } catch (error) {
+    console.log((error as Error).message);
+    return sendErrorResponse(res, (error as Error).message);
+  }
+};
+
+export const sendVerificationCode = async (req: Request, res: Response) => {
+  const { user, code } = req.body;
+  const send_to = user.email;
+  const VerfificationCode = code;
+
+  try {
+    const subject = `Verify your email Address`;
+    const message = verifyEmailAddressMailTemplate(VerfificationCode);
+    await sendEmail({ subject, message, send_to });
+    return sendSuccessResponse(
+      res,
+      "Email verification has been sent to the provided email!",
+    );
   } catch (error) {
     console.log((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);

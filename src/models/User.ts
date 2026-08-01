@@ -29,7 +29,7 @@ const UserSchema = new Schema<UserTypes>({
   },
   addresses: {
       type: [AddressSchema],
-      default: [], // Starts as empty array for new users
+      default: [],
     },
   bio: {
     type: String,
@@ -37,6 +37,10 @@ const UserSchema = new Schema<UserTypes>({
   DOB: {
     type: String,
   },
+isVerified: {
+      type: Boolean,
+      default: false, 
+    },
   date: {
     type: Date,
     default: Date.now,

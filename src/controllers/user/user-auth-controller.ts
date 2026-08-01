@@ -9,13 +9,13 @@ import { User } from "../../models/User.ts";
 import bcrypt, { genSaltSync } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { resetForgetPasswordToken } from "../../models/forgotpassword.ts";
+import { emailVerificationCode } from "../../models/emailverificationcode.ts";
 const JWT_USER_SECRET = "gdguigsgyyaihcgghs";
 // register as new user
-const signUp = async (req: Request, res: Response) => {
+const signUp = async (req: Request, res: Response, next: NextFunction) => {
   const { name, username, email, phone, password } = req.body;
   const salt = bcrypt.genSaltSync(10);
   const hashPassword = bcrypt.hashSync(password, salt);
-
   try {
     const SignUpNewUser = new User({
       name: name,
@@ -25,14 +25,52 @@ const signUp = async (req: Request, res: Response) => {
       password: hashPassword,
     });
     await SignUpNewUser.save();
-    return sendSuccessResponse(res, "Account successfully created!");
+    const user = await User.findOne({ email: email });
+    if (!user) {
+      return sendErrorResponse(res, "User doesn't Exist!");
+    }
+
+    const IstokenExist = await emailVerificationCode.findOne({
+      owner: user?._id.toString(),
+    });
+    if (IstokenExist) {
+      await emailVerificationCode.findByIdAndDelete(IstokenExist._id);
+    }
+    const code = await createNumericOTP();
+    const veriCode = new emailVerificationCode({
+      owner: user?._id,
+      token: code,
+    });
+    await veriCode.save();
+    req.body = { user, code };
+    next();
   } catch (error) {
     console.log((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);
   }
 };
 
-
+// verify your acc
+const verifyAccount = async (req: Request, res: Response) => {
+  const { token } = req.body;
+  try {
+    const isCodeExist = await emailVerificationCode.findOne({ token: token });
+    if (!isCodeExist) {
+      return sendErrorResponse(res, "Invalid Code!");
+    }
+    const owner = isCodeExist.owner;
+    const user = await User.findById(owner);
+    if (user) {
+      user.isVerified = true;
+      await user.save();
+    }
+    await emailVerificationCode.findOneAndDelete({ token: token });
+    return sendSuccessResponse(res, "Account Successfully created!");
+  } catch (error) {
+    console.log((error as Error).message);
+    return sendErrorResponse(res, (error as Error).message);
+  }
+};
 
 // login into acc
 const signIn = async (req: Request, res: Response, next: NextFunction) => {
@@ -44,41 +82,33 @@ const signIn = async (req: Request, res: Response, next: NextFunction) => {
   }
 
   try {
-    // 1. Generate the short-lived Access Token (15 minutes)
-    // NOTE: Make sure JWT_USER_SECRET is available in your scope or use process.env.JWT_USER_SECRET
     const token = jwt.sign(
       { id: exsitingUser._id },
       (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string,
       { expiresIn: "7d" },
     );
 
-    // 2. Set the Access Token cookie
     res.cookie(String(exsitingUser._id), token, {
       path: "/",
       expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV !== "development", // Fixed production security
+      secure: process.env.NODE_ENV !== "development",
     });
 
-    // 3. Generate the INITIAL Refresh Token (15 minutes)
-    // Fixed: changed 'exsitingUser.id' to 'exsitingUser._id' to match your MongoDB ID property
     const initialRefreshToken = jwt.sign(
       { id: exsitingUser._id, sessionType: "initial" },
       process.env.REFRESH_TOKEN_SECRET as string,
       { expiresIn: "15m" },
     );
 
-    // 4. Set the Refresh Token cookie
     res.cookie("refreshToken", initialRefreshToken, {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV !== "development", // Fixed production security
-      expires: new Date(Date.now() + 1000 * 60 * 15), // 15 minutes cookie expiration
+      secure: process.env.NODE_ENV !== "development",
+      expires: new Date(Date.now() + 1000 * 60 * 15),
     });
-
-    // 5. Pass data forward to your next middleware and send response
     req.body = { exsitingUser };
     next();
 
@@ -90,39 +120,37 @@ const signIn = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 // get user auth
- const getMe = async (req: Request, res: Response) => {
+const getMe = async (req: Request, res: Response) => {
   try {
-    // 1. Get the authenticated user ID attached by verifyUsersigninToken middleware
     const userId = (req as any).id;
 
     if (!userId) {
-      return sendErrorResponse(res, "Unauthorized: No user identifier found.", 401);
+      return sendErrorResponse(
+        res,
+        "Unauthorized: No user identifier found.",
+        401,
+      );
     }
 
-    // 2. Fetch user details from the database
-    // .select("-password") ensures we NEVER leak the hashed password over the network!
     const user = await User.findById(userId).select("-password -__v");
 
     if (!user) {
       return sendErrorResponse(res, "User profile not found.", 404);
     }
 
-    // 3. Return the sanitized user object
     return sendSuccessResponse(
-      res, 
-      "Authenticated user profile retrieved successfully.", 
-      { user }
+      res,
+      "Authenticated user profile retrieved successfully.",
+      { user },
     );
-
   } catch (error) {
     console.error("Get Current User Error:", (error as Error).message);
     return sendErrorResponse(res, (error as Error).message, 500);
   }
 };
 
-
 // logout from the acc
- const signOut = async (req: Request, res: Response) => {
+const signOut = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
     const cookieHeader = req.headers.cookie;
@@ -137,14 +165,15 @@ const signIn = async (req: Request, res: Response, next: NextFunction) => {
         secure: process.env.NODE_ENV !== "development",
       });
     } else {
-     
       const cookies = Object.fromEntries(
         cookieHeader.split("; ").map((c) => {
           const [key, ...val] = c.split("=");
           return [key, val.join("=")];
-        })
+        }),
       );
-      const accessTokenKey = Object.keys(cookies).find(key => key !== "refreshToken");
+      const accessTokenKey = Object.keys(cookies).find(
+        (key) => key !== "refreshToken",
+      );
       if (accessTokenKey) {
         res.clearCookie(accessTokenKey, {
           path: "/",
@@ -155,7 +184,6 @@ const signIn = async (req: Request, res: Response, next: NextFunction) => {
       }
     }
 
-  
     res.clearCookie("refreshToken", {
       path: "/",
       httpOnly: true,
@@ -166,12 +194,12 @@ const signIn = async (req: Request, res: Response, next: NextFunction) => {
     return sendSuccessResponse(res, "Successfully signed out!");
   } catch (error) {
     console.error("Sign Out Error:", (error as Error).message);
-    return sendErrorResponse(res, "An unexpected error occurred during sign out.");
+    return sendErrorResponse(
+      res,
+      "An unexpected error occurred during sign out.",
+    );
   }
 };
-
-
-
 
 const userForgotPassword = async (
   req: Request,
@@ -266,6 +294,7 @@ const resetUserPassword = async (
 
 export {
   signUp,
+  verifyAccount,
   signIn,
   getMe,
   signOut,

@@ -17,6 +17,7 @@ import {
   signUp,
   userForgotPassword,
   userForgotPasswordOtp,
+  verifyAccount,
 } from "../../controllers/user/user-auth-controller.ts";
 import {
   ValidateNewUserDetails,
@@ -30,6 +31,7 @@ import {
   sendResetPasswordMail,
   sendSigninMail,
   sendUpdatedPasswordMail,
+  sendVerificationCode,
 } from "../../services/email-services.ts";
 import { sendOtpSMS } from "../../services/otp-services.ts";
 import {
@@ -37,6 +39,7 @@ import {
   refreshSession,
   verifyUsersigninToken,
 } from "../../utils/helper.ts";
+
 
 const router = Router();
 
@@ -46,7 +49,9 @@ router.post(
   Validate,
   validateNewUser,
   signUp,
+  sendVerificationCode
 );
+router.post("/verify-account",verifyAccount)
 router.post(
   "/sign-in",
   ValidateSigninDetails,

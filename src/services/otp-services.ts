@@ -14,8 +14,7 @@ export const sendOtpSMS = async (req: Request, res: Response) => {
     return sendSuccessResponse(
       res,
       "Your OTP has been sent to the provided phone number!",
-      OTP,
-    );
+      );
   } catch (error) {
     console.log((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);

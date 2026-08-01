@@ -10,6 +10,7 @@ export interface UserTypes {
   addresses?: IAddress[];
   bio?: string;
   DOB?: string;
+  isVerified:boolean;
   date?: Date;
 }
 
@@ -23,10 +24,9 @@ export interface resetPasswordTokenTypes {
   createdAt: Date;
 }
 
-export interface signinOtpTypes {
+export interface VerificationCodeTypes {
   owner: string;
   token?: string;
-  OTP?: string;
   createdAt: Date;
 }
 export interface CustomTokenPayload {

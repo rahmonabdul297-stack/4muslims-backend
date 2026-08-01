@@ -13,7 +13,10 @@ const validateNewUser = async (
   var ItExisting;
   try {
     ItExisting = await User.findOne({ email: email.toLowerCase() });
-    if (ItExisting) {
+    if (ItExisting?.isVerified === false) {
+      await User.findOneAndDelete({ email: email });
+    }
+    if (ItExisting && ItExisting?.isVerified === true) {
       return sendErrorResponse(
         res,
         "The email already exist, try to sign-in instead!",
@@ -22,13 +25,13 @@ const validateNewUser = async (
     ItExisting = await User.findOne({
       username: username.toLowerCase(),
     });
-    if (ItExisting) {
+    if (ItExisting && ItExisting?.isVerified === true) {
       return sendErrorResponse(res, "username is not available");
     }
     ItExisting = await User.findOne({
       phone: phone,
     });
-    if (ItExisting) {
+    if (ItExisting && ItExisting?.isVerified === true) {
       return sendErrorResponse(
         res,
         "The phone number already exist, try to sign-in instead!",

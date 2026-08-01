@@ -8,7 +8,7 @@ export const emailHeader = () => {
 </head>
 <body>
      <header style="background-color: black; color:aqua; width: 100%; border-radius: 5px; border-color: aqua; padding: 2px 5px;">
-     <h2 style="padding: 3px;  font-weight: 600; font-size: x-large;">Token</h2>
+     <h2 style="padding: 3px;  font-weight: 600; font-size: x-large;">Ecommerce - Backend Testing</h2>
     </header>`;
   return header;
 };
@@ -21,12 +21,11 @@ export const emailFooter = () => {
         border-top: 1px;
         border-color: aqua;
         width: 100%;
-        height: 50px;
         text-align:center;
         padding-top:2px;
       "
     >
-      &copy; 2026 Token.
+      &copy; 2026 Ecommerce - Backend Testing.
     </footer>`;
   return Footer;
 };
