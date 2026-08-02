@@ -1,18 +1,16 @@
-import type { IAddress } from "./address.types.ts";
-
 export interface UserTypes {
-  name: string;
-  username: string;
-  email: string;
-  phone: string;
-  password: string;
-  profileImage?: string;
-  addresses?: IAddress[];
-  bio?: string;
-  DOB?: string;
-  isVerified:boolean;
-  date?: Date;
+  name: String; 
+  email: String; 
+  password?: String; 
+  profileImage?: String;
+  isPremium: Boolean; 
+  premiumExpiresAt: Date; 
+  authProvider: "google" | "apple" | "email"; 
+  isVerified: Boolean;
+  customerPaymentId?: String; 
+  createdAt: Date;
 }
+
 
 export interface TokenPayloadTypes {
   id: string;

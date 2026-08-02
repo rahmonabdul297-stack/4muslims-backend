@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import type {
   CustomTokenPayload,
   TokenPayloadTypes,
-} from "../types/model-types.ts";
+} from "../types/auth.types.ts";
 import { User } from "../models/User.ts";
 const JWT_USER_SECRET = process.env.JWT_USER_SECRET;
 export const sendSuccessResponse = (
@@ -96,7 +96,7 @@ export const refreshSession = async (req: Request, res: Response) => {
 
     if (!oldRefreshToken && req.headers.cookie) {
       const match = req.headers.cookie.match(
-        new RegExp("(^| )refreshToken=([^;]+)")
+        new RegExp("(^| )refreshToken=([^;]+)"),
       );
       if (match) {
         oldRefreshToken = match[2];
@@ -107,7 +107,7 @@ export const refreshSession = async (req: Request, res: Response) => {
       return sendErrorResponse(
         res,
         "Access Denied: No refresh token provided.",
-        401
+        401,
       );
     }
 
@@ -115,17 +115,25 @@ export const refreshSession = async (req: Request, res: Response) => {
     try {
       decoded = jwt.verify(
         oldRefreshToken,
-        process.env.REFRESH_TOKEN_SECRET as string
+        process.env.REFRESH_TOKEN_SECRET as string,
       ) as CustomTokenPayload;
     } catch (jwtError) {
       console.log("JWT Verification failed. Token sent was:", oldRefreshToken);
-      return sendErrorResponse(res, "Session expired. Please sign in again.", 401);
+      return sendErrorResponse(
+        res,
+        "Session expired. Please sign in again.",
+        401,
+      );
     }
 
     // 1. Double-check user still exists in DB
     const user = await User.findById(decoded.id);
     if (!user) {
-      return sendErrorResponse(res, "User no longer exists. Please sign in again.", 401);
+      return sendErrorResponse(
+        res,
+        "User no longer exists. Please sign in again.",
+        401,
+      );
     }
 
     // 2. Cookie configuration helper
@@ -135,7 +143,7 @@ export const refreshSession = async (req: Request, res: Response) => {
     const newAccessToken = jwt.sign(
       { id: user._id },
       process.env.JWT_USER_SECRET as string,
-      { expiresIn: "15m" }
+      { expiresIn: "15m" },
     );
 
     res.cookie("accessToken", newAccessToken, {
@@ -151,7 +159,7 @@ export const refreshSession = async (req: Request, res: Response) => {
     const newRefreshToken = jwt.sign(
       { id: user._id, sessionType: "extended" },
       process.env.REFRESH_TOKEN_SECRET as string,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.cookie("refreshToken", newRefreshToken, {
@@ -162,11 +170,9 @@ export const refreshSession = async (req: Request, res: Response) => {
       expires: new Date(Date.now() + cookieMaxAge), // Rolling 7-day extension!
     });
 
-    return sendSuccessResponse(
-      res,
-      "Session tokens successfully renewed!",
-      { accessToken: newAccessToken }
-    );
+    return sendSuccessResponse(res, "Session tokens successfully renewed!", {
+      accessToken: newAccessToken,
+    });
   } catch (error) {
     console.error("Critical Refresh Error:", (error as Error).message);
     return sendErrorResponse(res, "An unexpected error occurred.", 500);
@@ -195,10 +201,8 @@ export const createNumericOTP = () =>
     });
   });
 
-
-  export const getCartQuery = (req: Request) => {
-    if (req._id) return { user: req._id };
-    const guestToken = req.headers['x-guest-token'] as string;
-    return { guestToken };
-  };
-  
+export const getCartQuery = (req: Request) => {
+  if (req._id) return { user: req._id };
+  const guestToken = req.headers["x-guest-token"] as string;
+  return { guestToken };
+};

@@ -1,15 +1,12 @@
-import type { NextFunction, Request, Response } from "express";
+import type {Request, Response } from "express";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import {
-  OtpTemplate,
   resetPasswordTemplate,
   signinMailTemplate,
   updatedPasswordTemplate,
   verifyEmailAddressMailTemplate,
 } from "../templates/globalEmailTemplates/auth/resetpasswordtemp.ts";
 import { sendEmail } from "../utils/sendemail.utils.ts";
-import { User } from "../models/User.ts";
-import { sendSMS } from "../utils/sendsms.utils.ts";
 
 export const sendResetPasswordMail = async (req: Request, res: Response) => {
   const FRONTEND_URL = process.env.FRONTEND_URL;
@@ -53,7 +50,7 @@ export const sendUpdatedPasswordMail = async (req: Request, res: Response) => {
   }
 };
 
-export const sendSigninMail = async (req: Request, res: Response) => {
+export const sendLoginMail = async (req: Request, res: Response) => {
   const { exsitingUser } = req.body;
   const send_to = exsitingUser.email;
   const fullName = exsitingUser.name.split(" ")[0];
@@ -79,7 +76,7 @@ export const sendVerificationCode = async (req: Request, res: Response) => {
     await sendEmail({ subject, message, send_to });
     return sendSuccessResponse(
       res,
-      "Email verification has been sent to the provided email!",
+      "Check your email address, verification code has been sent",
     );
   } catch (error) {
     console.log((error as Error).message);

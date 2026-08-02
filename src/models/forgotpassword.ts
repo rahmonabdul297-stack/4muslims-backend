@@ -1,5 +1,5 @@
 import { model, Schema } from "mongoose";
-import type { resetPasswordTokenTypes } from "../types/model-types.ts";
+import type { resetPasswordTokenTypes } from "../types/auth.types.ts";
 const resetForgetPasswordTokenSchema = new Schema<resetPasswordTokenTypes>({
   owner: {
     type: String,
@@ -7,10 +7,9 @@ const resetForgetPasswordTokenSchema = new Schema<resetPasswordTokenTypes>({
   },
   token: {
     type: String,
-
   },
-  OTP:{
-     type: String,
+  OTP: {
+    type: String,
   },
   createdAt: {
     type: Date,

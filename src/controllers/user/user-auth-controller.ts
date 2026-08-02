@@ -12,14 +12,13 @@ import { resetForgetPasswordToken } from "../../models/forgotpassword.ts";
 import { emailVerificationCode } from "../../models/emailverificationcode.ts";
 const JWT_USER_SECRET = "gdguigsgyyaihcgghs";
 // register as new user
-const signUp = async (req: Request, res: Response, next: NextFunction) => {
-  const { name, username, email, phone, password } = req.body;
+const Register = async (req: Request, res: Response, next: NextFunction) => {
+  const { name, email, phone, password } = req.body;
   const salt = bcrypt.genSaltSync(10);
   const hashPassword = bcrypt.hashSync(password, salt);
   try {
     const SignUpNewUser = new User({
       name: name,
-      username: username,
       email: email,
       phone: phone,
       password: hashPassword,
@@ -73,7 +72,7 @@ const verifyAccount = async (req: Request, res: Response) => {
 };
 
 // login into acc
-const signIn = async (req: Request, res: Response, next: NextFunction) => {
+const Login = async (req: Request, res: Response, next: NextFunction) => {
   const { exsitingUser, password } = req.body;
 
   const isPasswordMatch = bcrypt.compareSync(password, exsitingUser.password);
@@ -293,9 +292,9 @@ const resetUserPassword = async (
 };
 
 export {
-  signUp,
+  Register,
   verifyAccount,
-  signIn,
+  Login,
   getMe,
   signOut,
   userForgotPassword,

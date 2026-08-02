@@ -1,5 +1,5 @@
 import { model, Schema } from "mongoose";
-import type { VerificationCodeTypes } from "../types/model-types.ts";
+import type { VerificationCodeTypes } from "../types/auth.types.ts";
 
 const VerfificationCodeSchema = new Schema<VerificationCodeTypes>({
   owner: {

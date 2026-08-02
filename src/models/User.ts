@@ -1,14 +1,8 @@
 import { model, Schema } from "mongoose";
-import type { UserTypes } from "../types/model-types.ts";
-import type { IAddress } from "../types/address.types.ts";
-import { AddressSchema } from "./address.ts";
+import type { UserTypes } from "../types/auth.types.ts";
 
 const UserSchema = new Schema<UserTypes>({
   name: {
-    type: String,
-    required: true,
-  },
-  username: {
     type: String,
     required: true,
   },
@@ -16,32 +10,33 @@ const UserSchema = new Schema<UserTypes>({
     type: String,
     required: true,
   },
-  phone: {
-    type: String,
-    required: true,
-  },
   password: {
     type: String,
-    required: true,
   },
   profileImage: {
     type: String,
   },
-  addresses: {
-      type: [AddressSchema],
-      default: [],
-    },
-  bio: {
+  authProvider: {
+    type: String,
+    enum: ["google", "apple", "email"],
+    default: "email",
+    required: true,
+  },
+  customerPaymentId: {
     type: String,
   },
-  DOB: {
-    type: String,
+  isPremium: {
+    type: Boolean,
+    default: false,
   },
-isVerified: {
-      type: Boolean,
-      default: false, 
-    },
-  date: {
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
+  premiumExpiresAt: {
+    type: Date,
+  },
+  createdAt: {
     type: Date,
     default: Date.now,
   },

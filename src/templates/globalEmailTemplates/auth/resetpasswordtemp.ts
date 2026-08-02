@@ -136,12 +136,12 @@ export const signinMailTemplate = (fullName: string) => {
   </h1>
 
   <p style="margin: 0 0 24px 0; font-size: 15px; color: #a1a1aa; line-height: 1.6;">
-    You have successfully signed in to your account. Explore your dashboard to manage your profile, security settings, and preferences.
+    You have successfully logged in to your account. Explore your dashboard to manage your profile, security settings, and preferences.
   </p>
 
   <div style="padding-top: 16px; border-top: 1px solid #27272a;">
     <p style="margin: 0; font-size: 13px; color: #71717a;">
-      If this sign-in was not performed by you, please reset your password immediately.
+      If this login was not performed by you, please reset your password immediately.
     </p>
   </div>
 

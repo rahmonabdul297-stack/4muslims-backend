@@ -8,7 +8,7 @@ export const emailHeader = () => {
 </head>
 <body>
      <header style="background-color: black; color:aqua; width: 100%; border-radius: 5px; border-color: aqua; padding: 2px 5px;">
-     <h2 style="padding: 3px;  font-weight: 600; font-size: x-large;">Ecommerce - Backend Testing</h2>
+     <h2 style="padding: 3px;  font-weight: 600; font-size: x-large;">4muslims Backend</h2>
     </header>`;
   return header;
 };
@@ -18,6 +18,7 @@ export const emailFooter = () => {
       style="
         background-color: #222;
         color:#fff;
+        font-size:14px;
         border-top: 1px;
         border-color: aqua;
         width: 100%;
@@ -25,7 +26,7 @@ export const emailFooter = () => {
         padding-top:2px;
       "
     >
-      &copy; 2026 Ecommerce - Backend Testing.
+      &copy; 2026 4muslims Backend.
     </footer>`;
   return Footer;
 };

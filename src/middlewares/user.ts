@@ -9,7 +9,7 @@ const validateNewUser = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const { username, email, phone } = req.body;
+  const { email } = req.body;
   var ItExisting;
   try {
     ItExisting = await User.findOne({ email: email.toLowerCase() });
@@ -22,25 +22,7 @@ const validateNewUser = async (
         "The email already exist, try to sign-in instead!",
       );
     }
-    ItExisting = await User.findOne({
-      username: username.toLowerCase(),
-    });
-    if (ItExisting && ItExisting?.isVerified === true) {
-      return sendErrorResponse(res, "username is not available");
-    }
-    ItExisting = await User.findOne({
-      phone: phone,
-    });
-    if (ItExisting && ItExisting?.isVerified === true) {
-      return sendErrorResponse(
-        res,
-        "The phone number already exist, try to sign-in instead!",
-      );
-    }
-
     req.body.email = email.toLowerCase();
-    req.body.username = username.toLowerCase();
-    req.body.phone = phone.toString();
     next();
   } catch (error) {
     console.log((error as Error).message);
@@ -55,12 +37,7 @@ const validateExistingUser = async (
 ) => {
   const { loginId, password } = req.body;
   try {
-    const exsitingUser = await User.findOne({
-      $or: [
-        { username: loginId.toLowerCase() },
-        { email: loginId.toLowerCase() },
-      ],
-    });
+    const exsitingUser = await User.findOne({ email: loginId.toLowerCase() });
     if (!exsitingUser) {
       return sendErrorResponse(res, "invalid Email or password, Try again!");
     }

@@ -12,9 +12,9 @@ import {
 import {
   getMe,
   resetUserPassword,
-  signIn,
+  Login,
   signOut,
-  signUp,
+  Register,
   userForgotPassword,
   userForgotPasswordOtp,
   verifyAccount,
@@ -25,11 +25,11 @@ import {
   ValidatePassword,
   ValidatePasswordReset,
   ValidatePhone,
-  ValidateSigninDetails,
+  ValidateLoginDetails,
 } from "../../middlewares/Validators.ts";
 import {
   sendResetPasswordMail,
-  sendSigninMail,
+  sendLoginMail,
   sendUpdatedPasswordMail,
   sendVerificationCode,
 } from "../../services/email-services.ts";
@@ -40,25 +40,24 @@ import {
   verifyUsersigninToken,
 } from "../../utils/helper.ts";
 
-
 const router = Router();
 
 router.post(
-  "/sign-up",
+  "/register",
   ValidateNewUserDetails,
   Validate,
   validateNewUser,
-  signUp,
-  sendVerificationCode
+  Register,
+  sendVerificationCode,
 );
-router.post("/verify-account",verifyAccount)
+router.post("/verify-account", verifyAccount);
 router.post(
-  "/sign-in",
-  ValidateSigninDetails,
+  "/login",
+  ValidateLoginDetails,
   Validate,
   validateExistingUser,
-  signIn,
-  sendSigninMail,
+  Login,
+  sendLoginMail,
 );
 
 router.post("/sign-out", verifyUsersigninToken, signOut);
