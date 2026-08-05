@@ -35,9 +35,12 @@ const validateExistingUser = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const { loginId, password } = req.body;
+  const {email, password } = req.body;
   try {
-    const exsitingUser = await User.findOne({ email: loginId.toLowerCase() });
+    const exsitingUser = await User.findOne({
+      email: email.toLowerCase(),
+    });
+    console.log("exsitingUser:", exsitingUser);
     if (!exsitingUser) {
       return sendErrorResponse(res, "invalid Email or password, Try again!");
     }

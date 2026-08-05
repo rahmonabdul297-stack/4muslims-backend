@@ -31,15 +31,9 @@ const updateUserProfile = async (req: Request, res: Response) => {
     }
 
     // 1. Handle Text Fields (from req.body)
-    const { name, username, email, phone, password, bio, DOB} = req.body;
-
+    const { name, email, password } = req.body;
     if (name) user.name = name;
-    if (phone) user.phone = phone;
-    if (bio) user.bio = bio;
-    if (DOB) user.DOB = DOB;
-    if (username) user.username = username.toLowerCase();
     if (email) user.email = email.toLowerCase();
-
     if (password) {
       const salt = bcrypt.genSaltSync(10);
       user.password = bcrypt.hashSync(password, salt);
@@ -90,8 +84,7 @@ const updateUserProfile = async (req: Request, res: Response) => {
 
     return sendSuccessResponse(res, "Profile updated successfully!", user);
   } catch (error) {
-    console.error("Profile Update Error:", (error as Error).message);
-    return sendErrorResponse(res, (error as Error).message, 500);
+    return sendErrorResponse(res, "name, email or password are required!");
   }
 };
 export { getUserProfile, updateUserProfile };

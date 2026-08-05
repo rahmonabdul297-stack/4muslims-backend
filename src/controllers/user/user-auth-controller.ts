@@ -149,7 +149,7 @@ const getMe = async (req: Request, res: Response) => {
 };
 
 // logout from the acc
-const signOut = async (req: Request, res: Response) => {
+const logOut = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
     const cookieHeader = req.headers.cookie;
@@ -190,13 +190,10 @@ const signOut = async (req: Request, res: Response) => {
       secure: process.env.NODE_ENV !== "development",
     });
 
-    return sendSuccessResponse(res, "Successfully signed out!");
+    return sendSuccessResponse(res, "Successfully logged out!");
   } catch (error) {
     console.error("Sign Out Error:", (error as Error).message);
-    return sendErrorResponse(
-      res,
-      "An unexpected error occurred during sign out.",
-    );
+    return sendErrorResponse(res, (error as Error).message);
   }
 };
 
@@ -296,7 +293,7 @@ export {
   verifyAccount,
   Login,
   getMe,
-  signOut,
+  logOut,
   userForgotPassword,
   userForgotPasswordOtp,
   resetUserPassword,

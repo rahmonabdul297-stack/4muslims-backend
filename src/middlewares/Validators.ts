@@ -1,13 +1,11 @@
-import { body } from "express-validator";
+import { body, oneOf } from "express-validator";
 const ValidateNewUserDetails = [
   body("name").isLength({ min: 3 }).withMessage("name is missing!"),
   body("email").isEmail().withMessage("email is missing!"),
 ];
 
 const ValidateLoginDetails = [
-  body("loginId")
-    .isLength({ min: 3 })
-    .withMessage("Enter valid username or email!"),
+  body("email").isEmail().withMessage("Enter valid email!"),
   body("password")
     .isLength({ min: 8 })
     .withMessage("Enter valid username or email!"),

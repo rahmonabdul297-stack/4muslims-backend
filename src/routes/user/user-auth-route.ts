@@ -10,14 +10,14 @@ import {
 } from "../../middlewares/user.ts";
 
 import {
-  getMe,
   resetUserPassword,
   Login,
-  signOut,
+  logOut,
   Register,
   userForgotPassword,
   userForgotPasswordOtp,
   verifyAccount,
+  getMe,
 } from "../../controllers/user/user-auth-controller.ts";
 import {
   ValidateNewUserDetails,
@@ -59,8 +59,11 @@ router.post(
   Login,
   sendLoginMail,
 );
+router.post("/logout", verifyUsersigninToken, logOut);
+router.get("/me", verifyUsersigninToken, getMe);
 
-router.post("/sign-out", verifyUsersigninToken, signOut);
+
+
 router.get("/check-session", CheckSession);
 router.post("/refresh", refreshSession);
 router.post(
