@@ -11,11 +11,13 @@ export const sendSuccessResponse = (
   res: Response,
   message: string,
   data?: any,
+  count?: number,
 ) => {
   return res.status(200).json({
     success: true,
     message: message,
     data: data,
+    count: count,
   });
 };
 
@@ -37,7 +39,7 @@ export const CheckSession = async (req: Request, res: Response) => {
   }
   return sendSuccessResponse(res, "session found!");
 };
-export const verifyUsersigninToken = async (
+export const verifyUserLoginToken = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -200,9 +202,3 @@ export const createNumericOTP = () =>
       resolve(OTP);
     });
   });
-
-export const getCartQuery = (req: Request) => {
-  if (req._id) return { user: req._id };
-  const guestToken = req.headers["x-guest-token"] as string;
-  return { guestToken };
-};

@@ -8,3 +8,10 @@ export interface CloudinaryUploadResult {
   url: string;
   public_id: string;
 }
+
+export interface CloudinaryVideoUploadResult {
+  url: string;
+  public_id: string;
+  duration?: number;
+  format?: string;
+}

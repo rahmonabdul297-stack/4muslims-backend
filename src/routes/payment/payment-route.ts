@@ -4,11 +4,11 @@
 //   initializePayment,
 //   verifyPayment,
 // } from "../../controllers/payments/payment.ts";
-// import { verifyUsersigninToken } from "../../utils/helper.ts";
+// import { verifyUserLoginToken } from "../../utils/helper.ts";
 
 // const router = Router();
 // // payment gateway
-// router.post("/initialize", verifyUsersigninToken, initializePayment);
-// router.get("/verify/:reference", verifyUsersigninToken, verifyPayment);
+// router.post("/initialize", verifyUserLoginToken, initializePayment);
+// router.get("/verify/:reference", verifyUserLoginToken, verifyPayment);
 // router.get("/webhook", handlePaystackWebhook);
 // export default router;

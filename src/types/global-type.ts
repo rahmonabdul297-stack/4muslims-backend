@@ -5,18 +5,35 @@ export interface sendEmailType {
 }
 
 export interface VideoTemplateTypes {
-  title: String; // required
-  description: String;
-  category: String; // e.g. "nature", "abstract", "mosque"
-  isPremium: Boolean; // default: false — gates free vs premium access
-  cloudinaryPublicId: String; // required — for deletion/reference
-  videoUrl: String; // required — Cloudinary secure_url
-  thumbnailUrl: String;
-  durationSeconds: Number;
-  resolution: String; // e.g. "1080x1920"
-  tags: [String];
-  uploadedBy: ObjectId; // ref: User (admin)
-  isActive: Boolean; // default: true — soft delete flag
-  createdAt: Date;
-  updatedAt: Date;
+  title: string;
+  description: string;
+  category: string;
+  isPremium: boolean;
+  cloudinaryPublicId: string;
+  videoUrl: string;
+  thumbnailUrl: string;
+  durationSeconds: number;
+  resolution: string;
+  isActive?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface GenerateVideoTypes {
+  jobId?: string;
+  userId: string; // ref: User, required, indexed
+  templateId: string; // ref: Template, required
+  surahNumber: number; // required, 1–114
+  ayahNumber: number; // required
+  reciterId: string; // required, maps to Islamic audio API reciter
+  arabicText: string; // selected verse text from public API
+  translationText: string; // selected translation text from public API
+  surahName?: string;
+  status: string; // "pending" | "processing" | "completed" | "failed"
+  progress?: number; // 0–100, optional fine-grained tracking
+  outputUrl: string; // final Cloudinary MP4 url, populated on completion
+  errorMessage?: string;
+  outputDurationSeconds?: number;
+  createdAt?: Date;
+  completedAt?: Date;
 }

@@ -37,7 +37,7 @@ import { sendOtpSMS } from "../../services/otp-services.ts";
 import {
   CheckSession,
   refreshSession,
-  verifyUsersigninToken,
+  verifyUserLoginToken,
 } from "../../utils/helper.ts";
 
 const router = Router();
@@ -59,10 +59,8 @@ router.post(
   Login,
   sendLoginMail,
 );
-router.post("/logout", verifyUsersigninToken, logOut);
-router.get("/me", verifyUsersigninToken, getMe);
-
-
+router.post("/logout", verifyUserLoginToken, logOut);
+router.get("/me", verifyUserLoginToken, getMe);
 
 router.get("/check-session", CheckSession);
 router.post("/refresh", refreshSession);
