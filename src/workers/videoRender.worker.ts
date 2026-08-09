@@ -8,6 +8,7 @@ import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
 import { cloudinaryUploader } from "../cloudinary.ts";
 import { redisConnection } from "../redis.ts";
 import connectDB from "../db/index.ts";
+import { findReciterConfig } from "../config/reciters.ts";
 
 const clearTempDir = async (jobId: string) => {
   const dir = path.join(process.cwd(), "tmp", jobId);
@@ -23,6 +24,8 @@ const updateRenderStatus = async (
     progress: number;
     outputUrl: string;
     errorMessage: string;
+    audioUrl?: string;
+    globalAyahNumber?: number;
   }>,
 ) => {
   await GeneratedVideo.findByIdAndUpdate(mongoRenderId, data, {
@@ -45,54 +48,89 @@ const initWorker = async () => {
       await updateRenderStatus(payload.mongoRenderId, {
         status: "processing",
         progress: 10,
-      });
+        audioUrl: payload.audioUrl,
+        globalAyahNumber: payload.globalAyahNumber,
+      } as any);
 
       const jobId = job.id?.toString();
       if (!jobId) {
         throw new Error("Missing BullMQ job id");
       }
-      const outputPath = await renderQuranOverlay({
+
+      const reciterConfig = findReciterConfig(payload.reciterId);
+      if (!reciterConfig) {
+        throw new Error(`Invalid reciterId: ${payload.reciterId}`);
+      }
+      const audioUrl = payload.audioUrl;
+
+      console.log("[videoRender.worker] processing audioUrl=", audioUrl, {
         jobId,
-        videoUrl: payload.videoUrl,
-        audioUrl: payload.audioUrl,
+        mongoRenderId: payload.mongoRenderId,
         surahNumber: payload.surahNumber,
         ayahNumber: payload.ayahNumber,
-        arabicText: payload.arabicText,
-        translationText: payload.translationText,
-        surahName: payload.surahName,
-        onProgress: async (progress) => {
-          await updateRenderStatus(payload.mongoRenderId, {
-            progress,
-          });
-        },
+        reciterId: payload.reciterId,
+        reciterName: reciterConfig.name,
       });
 
-      const outputBuffer = await fs.promises.readFile(outputPath);
-      const uploadResult = await cloudinaryUploader(
-        outputBuffer,
-        "quran_generated_videos",
-        "video",
-      );
+      try {
+        const outputPath = await renderQuranOverlay({
+          jobId,
+          videoUrl: payload.videoUrl,
+          audioUrl,
+          surahNumber: payload.surahNumber,
+          ayahNumber: payload.ayahNumber,
+          arabicText: payload.arabicText,
+          translationText: payload.translationText,
+          surahName: payload.surahName,
+          onProgress: async (progress) => {
+            await updateRenderStatus(payload.mongoRenderId, {
+              progress,
+            });
+          },
+        });
 
-      if (!uploadResult?.secure_url) {
-        throw new Error("Cloudinary upload did not return a secure_url");
+        const outputBuffer = await fs.promises.readFile(outputPath);
+        const uploadResult = await cloudinaryUploader(
+          outputBuffer,
+          "quran_generated_videos",
+          "video",
+        );
+
+        if (!uploadResult?.secure_url) {
+          throw new Error("Cloudinary upload did not return a secure_url");
+        }
+
+        await updateRenderStatus(payload.mongoRenderId, {
+          status: "completed",
+          progress: 100,
+          outputUrl: uploadResult.secure_url,
+        });
+
+        return {
+          outputUrl: uploadResult.secure_url,
+        };
+      } catch (error) {
+        await updateRenderStatus(payload.mongoRenderId, {
+          status: "failed",
+          errorMessage: (error as Error)?.message || "Render failed",
+        });
+        throw error;
+      } finally {
+        await clearTempDir(jobId);
       }
-
-      await updateRenderStatus(payload.mongoRenderId, {
-        status: "completed",
-        progress: 100,
-        outputUrl: uploadResult.secure_url,
-      });
-
-      await clearTempDir(jobId);
-      return {
-        outputUrl: uploadResult.secure_url,
-      };
     },
     { connection: redisConnection },
   );
 
   worker.on("failed", async (job: Job<VideoRenderJobData> | undefined, err) => {
+    console.error(
+      "Video render job failed:",
+      job?.id,
+      "payload:",
+      job?.data,
+      "error:",
+      err,
+    );
     if (!job?.data?.mongoRenderId) return;
     await updateRenderStatus(job.data.mongoRenderId, {
       status: "failed",

@@ -1,13 +1,20 @@
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
-import canvas from "@napi-rs/canvas";
 import ffmpegStatic from "ffmpeg-static";
 
 ffmpeg.setFfmpegPath(ffmpegStatic as any);
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const TMP_ROOT = path.resolve("tmp");
+
+// 1. Convert Windows backslashes to forward slashes.
+// DO NOT escape the colon when wrapping the path in single quotes inside drawtext!
+const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
+const arabicFontPath = rawFontPath.replace(/\\/g, "/");
 
 const ensureTempDir = (dir: string) => {
   if (!fs.existsSync(dir)) {
@@ -15,80 +22,36 @@ const ensureTempDir = (dir: string) => {
   }
 };
 
-const downloadFile = async (url: string, outputPath: string) => {
-  const response = await axios.get<ArrayBuffer>(url, {
-    responseType: "arraybuffer",
-  });
-  await fs.promises.writeFile(outputPath, Buffer.from(response.data));
+// 2. Safe escaping for FFmpeg drawtext parameters inside single quotes
+const escapeFfmpegText = (value: string) => {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "'\\\\''") // Escapes single quotes for FFmpeg
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "%%")
+    .replace(/\n/g, "\\n");
 };
 
-const renderOverlayImage = async (
-  jobId: string,
-  surahNumber: number,
-  ayahNumber: number,
-  arabicText: string,
-  translationText: string,
-  surahName?: string,
-) => {
-  const jobDir = path.join(TMP_ROOT, jobId);
-  const overlayPath = path.join(jobDir, "overlay.png");
-  const width = 1080;
-  const height = 1920;
-  const surface = canvas.createCanvas(width, height);
-  const ctx = surface.getContext("2d");
-
-  ctx.fillStyle = "#000000";
-  ctx.fillRect(0, 0, width, height);
-
-  ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
-  const cardX = 60;
-  const cardY = 220;
-  const cardW = width - 120;
-  const cardH = 1300;
-  const radius = 40;
-  ctx.beginPath();
-  ctx.moveTo(cardX + radius, cardY);
-  ctx.lineTo(cardX + cardW - radius, cardY);
-  ctx.quadraticCurveTo(cardX + cardW, cardY, cardX + cardW, cardY + radius);
-  ctx.lineTo(cardX + cardW, cardY + cardH - radius);
-  ctx.quadraticCurveTo(
-    cardX + cardW,
-    cardY + cardH,
-    cardX + cardW - radius,
-    cardY + cardH,
-  );
-  ctx.lineTo(cardX + radius, cardY + cardH);
-  ctx.quadraticCurveTo(cardX, cardY + cardH, cardX, cardY + cardH - radius);
-  ctx.lineTo(cardX, cardY + radius);
-  ctx.quadraticCurveTo(cardX, cardY, cardX + radius, cardY);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 52px Sans";
-  ctx.textAlign = "center";
-  const headerText = surahName
-    ? `${surahName.toUpperCase()} - AYAH ${ayahNumber}`
-    : `SURAH ${surahNumber} : AYAH ${ayahNumber}`;
-  ctx.fillText(headerText, width / 2, cardY + 80);
-
-  ctx.font = "bold 90px Sans";
-  ctx.textAlign = "right";
-  ctx.fillText(arabicText, cardX + cardW - 40, cardY + 260);
-
-  ctx.font = "36px Sans";
-  ctx.textAlign = "left";
-  const translationLines = translationText
-    .split("\n")
-    .map((line) => line.trim());
-  let translateY = cardY + 420;
-  for (const line of translationLines) {
-    ctx.fillText(line, cardX + 50, translateY);
-    translateY += 46;
+const downloadFile = async (url: string, outputPath: string) => {
+  try {
+    const response = await axios.get<ArrayBuffer>(url, {
+      responseType: "arraybuffer",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        Accept: "*/*",
+      },
+    });
+    await fs.promises.writeFile(outputPath, Buffer.from(response.data));
+  } catch (error) {
+    const axiosError = error as any;
+    const status = axiosError?.response?.status;
+    const statusText = axiosError?.response?.statusText;
+    const message = axiosError?.message || "Unknown download error";
+    throw new Error(
+      `Failed to download ${url}: ${status || "no status"} ${statusText || message}`,
+    );
   }
-
-  await fs.promises.writeFile(overlayPath, surface.toBuffer("image/png"));
-  return overlayPath;
 };
 
 export interface OverlayRenderParams {
@@ -114,7 +77,7 @@ export const renderQuranOverlay = async ({
   surahName,
   onProgress,
 }: OverlayRenderParams): Promise<string> => {
-  const jobDir = path.join(TMP_ROOT, jobId);
+  const jobDir = path.join(TMP_ROOT, String(jobId));
   ensureTempDir(jobDir);
 
   const videoPath = path.join(jobDir, "template.mp4");
@@ -126,34 +89,54 @@ export const renderQuranOverlay = async ({
     downloadFile(audioUrl, audioPath),
   ]);
 
-  await renderOverlayImage(
-    jobId,
-    surahNumber,
-    ayahNumber,
-    arabicText,
-    translationText,
-    surahName,
-  );
+  if (!fs.existsSync(rawFontPath)) {
+    throw new Error(
+      `Arabic font not found at ${rawFontPath}. Place Amiri-Regular.ttf in src/fonts/`,
+    );
+  }
 
-  const overlayPath = path.join(jobDir, "overlay.png");
+  const escapedArabicText = escapeFfmpegText(arabicText);
+  const escapedTranslationText = escapeFfmpegText(translationText);
+
+  // 3. Chain drawtext filters together using a comma
+  const filterGraph = [
+    `drawtext=fontfile='${arabicFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=64:box=1:boxcolor=black@0.4:boxborderw=12:x=(w-tw)/2:y=(h-th)/2.5`,
+    `drawtext=fontfile='${arabicFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=32:box=1:boxcolor=black@0.4:boxborderw=8:x=(w-tw)/2:y=(h-th)/1.8`,
+  ].join(",");
 
   return new Promise<string>((resolve, reject) => {
     let lastProgress = 0;
+
     const command = ffmpeg()
       .input(videoPath)
-      .inputOptions(["-stream_loop -1"])
-      .input(overlayPath)
+      .inputOptions(["-stream_loop", "-1"])
       .input(audioPath)
-      .complexFilter(["[0:v][1:v]overlay=0:0:shortest=1[outv]"])
+      .complexFilter(filterGraph) // Pass string directly, NOT inside an array
       .outputOptions([
-        "-map [outv]",
-        "-map 2:a",
-        "-c:v libx264",
-        "-c:a aac",
-        "-preset ultrafast",
+        "-map",
+        "0:v",
+        "-map",
+        "1:a",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-pix_fmt",
+        "yuv420p",
         "-shortest",
+        "-movflags",
+        "+faststart",
+        "-y",
       ])
       .output(outputPath)
+      .on("start", (cmd) => {
+        console.log("Executing FFmpeg command:\n", cmd);
+      })
+      .on("stderr", (stderrLine) => {
+        console.debug("ffmpeg:", stderrLine);
+      })
       .on("progress", (progress) => {
         if (!progress.percent) return;
         const value = Math.min(100, Math.max(0, Math.round(progress.percent)));

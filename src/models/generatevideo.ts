@@ -11,6 +11,8 @@ const GenerateVideoSchema = new Schema<GenerateVideoTypes>(
     reciterId: { type: String, required: true },
     arabicText: { type: String, required: true },
     translationText: { type: String, required: true },
+    audioUrl: { type: String, required: false, default: "" },
+    globalAyahNumber: { type: Number, required: false },
     surahName: { type: String, required: false },
     status: {
       type: String,

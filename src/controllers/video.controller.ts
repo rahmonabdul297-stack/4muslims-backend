@@ -4,6 +4,12 @@ import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 import { Video } from "../models/videotemp.ts";
 import { videoRenderQueue } from "../queues/videorender.ts";
+import {
+  buildQuranAudioUrl,
+  getGlobalAyahNumber,
+  normalizeQuranAudioUrl,
+} from "../services/audioUrl.service.ts";
+import { findReciterConfig } from "../config/reciters.ts";
 
 const findTemplateVideo = async (templateId: string) => {
   const video = await Video.findById(templateId);
@@ -17,19 +23,12 @@ const findAudioUrl = async (
   reciterId: string,
   surahNumber: number,
   ayahNumber: number,
-  bitrate?: string,
+  bitrate?: string | number,
 ) => {
-  // Use explicit CDN template if provided, otherwise fall back to env base
-  const configuredBitrate = bitrate || process.env.QURAN_AUDIO_BITRATE || "64kbps";
-  // Preferred template per request: https://cdn.islamic.network/quran/audio/${bitrate}/${reciterId}/${ayahNumber}.mp3
-  // Build using the known CDN template to ensure consistent audio URLs
-  return `https://cdn.islamic.network/quran/audio/${configuredBitrate}/${reciterId}/${ayahNumber}.mp3`;
+  return buildQuranAudioUrl(reciterId, surahNumber, ayahNumber, bitrate);
 };
 
-const fetchQuranAyah = async (
-  surahNumber: number,
-  ayahNumber: number,
-) => {
+const fetchQuranAyah = async (surahNumber: number, ayahNumber: number) => {
   try {
     const resp = await axios.get(
       `https://api.alquran.cloud/v1/ayah/${surahNumber}:${ayahNumber}/quran-uthmani`,
@@ -37,8 +36,38 @@ const fetchQuranAyah = async (
     const arabic = resp?.data?.data?.text || "";
     return { arabicText: arabic };
   } catch (err) {
-    console.warn("Failed to fetch ayah text from AlQuran API:", (err as Error).message);
+    console.warn(
+      "Failed to fetch ayah text from AlQuran API:",
+      (err as Error).message,
+    );
     return { arabicText: "" };
+  }
+};
+
+const validateUrlAccessible = async (url: string) => {
+  const headers = {
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    Accept: "*/*",
+    Referer: "https://cdn.islamic.network/",
+  };
+
+  try {
+    await axios.head(url, { headers });
+    return true;
+  } catch (error) {
+    const axiosError = error as any;
+    if (axiosError?.response?.status === 405) {
+      const response = await axios.get(url, {
+        responseType: "stream",
+        headers,
+      });
+      response.data.destroy();
+      return true;
+    }
+    throw new Error(
+      `URL validation failed for ${url}: ${axiosError?.response?.status || "unknown"} ${axiosError?.response?.statusText || axiosError?.message}`,
+    );
   }
 };
 
@@ -54,12 +83,22 @@ const generateCustomVideo = async (req: Request, res: Response) => {
     surahName,
   } = req.body;
 
-  if (!templateId || typeof surahNumber !== "number" || typeof ayahNumber !== "number" || !reciterId) {
+  if (
+    !templateId ||
+    typeof surahNumber !== "number" ||
+    typeof ayahNumber !== "number" ||
+    !reciterId
+  ) {
     return sendErrorResponse(
       res,
       "templateId, surahNumber, ayahNumber and reciterId are required!",
       400,
     );
+  }
+
+  const reciterConfig = findReciterConfig(reciterId);
+  if (!reciterConfig) {
+    return sendErrorResponse(res, "Invalid reciterId provided", 400);
   }
 
   // If arabicText or translationText not provided, attempt to fetch Arabic text from the AlQuran API
@@ -77,16 +116,44 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       400,
     );
   }
+
   try {
+    const globalAyahNumber = getGlobalAyahNumber(surahNumber, ayahNumber);
     const videoUrl = await findTemplateVideo(templateId);
-    const audioUrl = await findAudioUrl(reciterId, surahNumber, ayahNumber, process.env.QURAN_AUDIO_BITRATE);
+    const bitrate = reciterConfig.bitrate ?? process.env.QURAN_AUDIO_BITRATE;
+    let audioUrl = await findAudioUrl(
+      reciterId,
+      surahNumber,
+      ayahNumber,
+      bitrate,
+    );
+    audioUrl = normalizeQuranAudioUrl(
+      audioUrl,
+      reciterId,
+      surahNumber,
+      ayahNumber,
+      bitrate,
+    );
+
+    console.log("[generateCustomVideo] audioUrl=", audioUrl, {
+      templateId,
+      surahNumber,
+      ayahNumber,
+      reciterId,
+      bitrate: bitrate || "128",
+      reciterName: reciterConfig.name,
+    });
+
+    await validateUrlAccessible(audioUrl);
 
     const generated = await GeneratedVideo.create({
       userId,
       templateId,
       surahNumber,
       ayahNumber,
+      globalAyahNumber,
       reciterId,
+      audioUrl,
       arabicText: resolvedArabicText,
       translationText: resolvedTranslationText,
       surahName,
@@ -104,12 +171,19 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         templateId,
         videoUrl,
         audioUrl,
-        arabicText,
-        translationText,
+        arabicText: resolvedArabicText,
+        translationText: resolvedTranslationText,
         surahNumber,
         ayahNumber,
+        globalAyahNumber,
         surahName,
         reciterId,
+      });
+      console.log("[generateCustomVideo] queued audioUrl=", audioUrl, {
+        rawReciterId: reciterId,
+        normalizedReciterId: reciterId,
+        ayahNumber,
+        bitrate,
       });
     } catch (queueError) {
       await GeneratedVideo.findByIdAndDelete(generated._id);

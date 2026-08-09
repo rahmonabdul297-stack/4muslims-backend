@@ -28,6 +28,8 @@ export interface GenerateVideoTypes {
   reciterId: string; // required, maps to Islamic audio API reciter
   arabicText: string; // selected verse text from public API
   translationText: string; // selected translation text from public API
+  audioUrl?: string;
+  globalAyahNumber?: number;
   surahName?: string;
   status: string; // "pending" | "processing" | "completed" | "failed"
   progress?: number; // 0–100, optional fine-grained tracking

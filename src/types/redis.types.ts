@@ -8,6 +8,7 @@ export interface VideoRenderJobData {
   translationText: string;
   surahNumber: number;
   ayahNumber: number;
+  globalAyahNumber?: number;
   surahName?: string;
   reciterId: string;
 }
