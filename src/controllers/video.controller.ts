@@ -140,6 +140,8 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       surahNumber,
       ayahNumber,
       reciterId,
+      resolvedArabicText,
+      resolvedTranslationText,
       bitrate: bitrate || "128",
       reciterName: reciterConfig.name,
     });

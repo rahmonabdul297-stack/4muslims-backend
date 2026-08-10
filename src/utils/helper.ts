@@ -6,6 +6,8 @@ import type {
   TokenPayloadTypes,
 } from "../types/auth.types.ts";
 import { User } from "../models/User.ts";
+import reshaper from "arabic-persian-reshaper";
+import bidiFactory from "bidi-js";
 const JWT_USER_SECRET = process.env.JWT_USER_SECRET;
 export const sendSuccessResponse = (
   res: Response,
@@ -202,3 +204,16 @@ export const createNumericOTP = () =>
       resolve(OTP);
     });
   });
+
+const bidi = bidiFactory();
+
+export const shapeArabicText = (text: string): string => {
+  if (!text) return "";
+
+  // 1. Join isolated Arabic characters into connected cursive forms
+  const joinedText = reshaper.ArabicReshaper.convertArabic(text);
+
+  // 2. Reorder text from Right-to-Left for standard rendering engines
+  const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
+  return bidi.getReorderedString(joinedText, embeddingLevels);
+};

@@ -9,7 +9,7 @@ import VideoRoutes from "./routes/video-routes.ts";
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = 2080;
+const PORT = 8888;
 
 // middleware
 

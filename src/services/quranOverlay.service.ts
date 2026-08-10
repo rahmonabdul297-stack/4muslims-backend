@@ -4,17 +4,16 @@ import { fileURLToPath } from "url";
 import axios from "axios";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import reshaper from "arabic-persian-reshaper";
+import bidiFactory from "bidi-js";
 
 ffmpeg.setFfmpegPath(ffmpegStatic as any);
+
+const bidi = bidiFactory();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TMP_ROOT = path.resolve("tmp");
-
-// 1. Convert Windows backslashes to forward slashes.
-// DO NOT escape the colon when wrapping the path in single quotes inside drawtext!
-const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
-const arabicFontPath = rawFontPath.replace(/\\/g, "/");
 
 const ensureTempDir = (dir: string) => {
   if (!fs.existsSync(dir)) {
@@ -22,14 +21,28 @@ const ensureTempDir = (dir: string) => {
   }
 };
 
-// 2. Safe escaping for FFmpeg drawtext parameters inside single quotes
+/**
+ * Connects cursive Arabic characters and reorders text for engines lacking CTL.
+ */
+export const shapeArabicText = (text: string): string => {
+  if (!text) return "";
+  const joinedText = reshaper.ArabicReshaper.convertArabic(text);
+  const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
+  return bidi.getReorderedString(joinedText, embeddingLevels);
+};
+
+// Safe escaping for text strings in FFmpeg drawtext
 const escapeFfmpegText = (value: string) => {
+  if (!value) return "";
   return String(value)
     .replace(/\\/g, "\\\\")
-    .replace(/'/g, "'\\\\''") // Escapes single quotes for FFmpeg
-    .replace(/:/g, "\\:")
-    .replace(/%/g, "%%")
-    .replace(/\n/g, "\\n");
+    .replace(/'/g, "'\\\\''")
+    .replace(/%/g, "%%");
+};
+
+// Format font path safely for FFmpeg drawtext on Windows/Linux
+const formatFontPath = (fontPath: string) => {
+  return fontPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 };
 
 const downloadFile = async (url: string, outputPath: string) => {
@@ -49,7 +62,7 @@ const downloadFile = async (url: string, outputPath: string) => {
     const statusText = axiosError?.response?.statusText;
     const message = axiosError?.message || "Unknown download error";
     throw new Error(
-      `Failed to download ${url}: ${status || "no status"} ${statusText || message}`,
+      `Failed to download ${url}: ${status || "no status"} ${statusText || message}`
     );
   }
 };
@@ -84,25 +97,35 @@ export const renderQuranOverlay = async ({
   const audioPath = path.join(jobDir, "audio.mp3");
   const outputPath = path.join(jobDir, "output.mp4");
 
+  const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
+  if (!fs.existsSync(rawFontPath)) {
+    throw new Error(
+      `Arabic font file not found at ${rawFontPath}. Please ensure Amiri-Regular.ttf exists in src/fonts/`
+    );
+  }
+
+  const safeFontPath = formatFontPath(rawFontPath);
+
   await Promise.all([
     downloadFile(videoUrl, videoPath),
     downloadFile(audioUrl, audioPath),
   ]);
 
-  if (!fs.existsSync(rawFontPath)) {
-    throw new Error(
-      `Arabic font not found at ${rawFontPath}. Place Amiri-Regular.ttf in src/fonts/`,
-    );
-  }
-
-  const escapedArabicText = escapeFfmpegText(arabicText);
+  // Pre-shape the Arabic text before escaping
+  const reshapedArabic = shapeArabicText(arabicText);
+  const escapedArabicText = escapeFfmpegText(reshapedArabic);
   const escapedTranslationText = escapeFfmpegText(translationText);
 
-  // 3. Chain drawtext filters together using a comma
-  const filterGraph = [
-    `drawtext=fontfile='${arabicFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=64:box=1:boxcolor=black@0.4:boxborderw=12:x=(w-tw)/2:y=(h-th)/2.5`,
-    `drawtext=fontfile='${arabicFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=32:box=1:boxcolor=black@0.4:boxborderw=8:x=(w-tw)/2:y=(h-th)/1.8`,
-  ].join(",");
+  console.log(`[renderQuranOverlay:${jobId}] Rendering overlay:`);
+  console.log(` - Arabic string length: ${arabicText?.length || 0}`);
+  console.log(` - Translation string length: ${translationText?.length || 0}`);
+  console.log(` - Font path: ${safeFontPath}`);
+
+  // Complex filter graph with shaped Arabic text and bounds safety
+  const arabicFilter = `drawtext=fontfile='${safeFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-tw)/2:y=(h-th)/2.5:fix_bounds=1`;
+  const translationFilter = `drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=28:box=1:boxcolor=black@0.5:boxborderw=8:x=(w-tw)/2:y=(h-th)/1.6:fix_bounds=1`;
+
+  const filterGraph = `${arabicFilter},${translationFilter}`;
 
   return new Promise<string>((resolve, reject) => {
     let lastProgress = 0;
@@ -111,7 +134,7 @@ export const renderQuranOverlay = async ({
       .input(videoPath)
       .inputOptions(["-stream_loop", "-1"])
       .input(audioPath)
-      .complexFilter(filterGraph) // Pass string directly, NOT inside an array
+      .complexFilter(filterGraph)
       .outputOptions([
         "-map",
         "0:v",
@@ -119,6 +142,10 @@ export const renderQuranOverlay = async ({
         "1:a",
         "-c:v",
         "libx264",
+        "-preset",
+        "fast",
+        "-crf",
+        "23",
         "-c:a",
         "aac",
         "-b:a",
@@ -135,7 +162,13 @@ export const renderQuranOverlay = async ({
         console.log("Executing FFmpeg command:\n", cmd);
       })
       .on("stderr", (stderrLine) => {
-        console.debug("ffmpeg:", stderrLine);
+        if (
+          stderrLine.includes("drawtext") ||
+          stderrLine.includes("Filter") ||
+          stderrLine.includes("Error")
+        ) {
+          console.error("FFmpeg Filter Log:", stderrLine);
+        }
       })
       .on("progress", (progress) => {
         if (!progress.percent) return;
@@ -146,7 +179,10 @@ export const renderQuranOverlay = async ({
         }
       })
       .on("end", () => resolve(outputPath))
-      .on("error", (err) => reject(err));
+      .on("error", (err) => {
+        console.error("FFmpeg rendering error:", err);
+        reject(err);
+      });
 
     command.run();
   });
