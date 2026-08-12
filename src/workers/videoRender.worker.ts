@@ -5,10 +5,11 @@ import { GeneratedVideo } from "../models/generatevideo.ts";
 import { VIDEO_RENDER_QUEUE } from "../queues/videorender.ts";
 import type { VideoRenderJobData } from "../types/redis.types.ts";
 import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
-import { cloudinaryUploader } from "../cloudinary.ts";
+
 import { redisConnection } from "../redis.ts";
 import connectDB from "../db/index.ts";
 import { findReciterConfig } from "../config/reciters.ts";
+import { uploadVideoToCloudinary } from "../cloudinary.ts";
 
 const clearTempDir = async (jobId: string) => {
   const dir = path.join(process.cwd(), "tmp", jobId);
@@ -90,10 +91,9 @@ const initWorker = async () => {
         });
 
         const outputBuffer = await fs.promises.readFile(outputPath);
-        const uploadResult = await cloudinaryUploader(
-          outputBuffer,
+        const uploadResult = await uploadVideoToCloudinary(
+          outputPath,
           "quran_generated_videos",
-          "video",
         );
 
         if (!uploadResult?.secure_url) {

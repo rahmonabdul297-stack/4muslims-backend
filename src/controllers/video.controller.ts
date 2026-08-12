@@ -250,5 +250,23 @@ const getVideoStatus = async (req: Request, res: Response) => {
     errorMessage: record.errorMessage,
   });
 };
+const generatedVideoHistory = async (req: Request, res: Response) => {
+  const userId = (req as any).id;
+  if (!userId) {
+    return sendErrorResponse(res, "You're not authenticated!");
+  }
+  try {
+    const history = await GeneratedVideo.find({
+      userId: userId,
+    });
+    if (!history || history.length === 0) {
+      return sendErrorResponse(res, "No Generated video found!");
+    }
+    return sendSuccessResponse(res, "history successfully fetched", history);
+  } catch (error) {
+    console.log((error as Error).message);
+    return sendErrorResponse(res, (error as Error).message);
+  }
+};
 
-export { generateCustomVideo, getVideoStatus };
+export { generateCustomVideo, getVideoStatus, generatedVideoHistory };

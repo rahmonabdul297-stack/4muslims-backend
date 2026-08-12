@@ -211,9 +211,12 @@ export const shapeArabicText = (text: string): string => {
   if (!text) return "";
 
   // 1. Join isolated Arabic characters into connected cursive forms
-  const joinedText = reshaper.ArabicReshaper.convertArabic(text);
+  const joinedText = reshaper.ArabicShaper.convertArabic(text);
 
-  // 2. Reorder text from Right-to-Left for standard rendering engines
-  const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
-  return bidi.getReorderedString(joinedText, embeddingLevels);
+ return joinedText
+    .split("\n")
+    .map(line => line.split("").reverse().join(""))
+    .join("\n");
 };
+
+

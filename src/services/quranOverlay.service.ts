@@ -14,30 +14,68 @@ const bidi = bidiFactory();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const TMP_ROOT = path.resolve("tmp");
-
 const ensureTempDir = (dir: string) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 };
 
-/**
- * Connects cursive Arabic characters and reorders text for engines lacking CTL.
- */
 export const shapeArabicText = (text: string): string => {
   if (!text) return "";
-  const joinedText = reshaper.ArabicReshaper.convertArabic(text);
+  const joinedText = reshaper.ArabicShaper.convertArabic(text);
   const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
   return bidi.getReorderedString(joinedText, embeddingLevels);
 };
 
-// Safe escaping for text strings in FFmpeg drawtext
+const chunkString = (value: string, chunkSize: number) => {
+  const chunks: string[] = [];
+  for (let i = 0; i < value.length; i += chunkSize) {
+    chunks.push(value.slice(i, i + chunkSize));
+  }
+  return chunks;
+};
+
+const wrapText = (text: string, maxChars = 36): string => {
+  if (!text) return "";
+  const words = text.trim().split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+      continue;
+    }
+
+    const nextLength = currentLine.length + 1 + word.length;
+    if (nextLength <= maxChars) {
+      currentLine = `${currentLine} ${word}`;
+    } else {
+      lines.push(currentLine);
+      if (word.length > maxChars) {
+        lines.push(...chunkString(word, maxChars));
+        currentLine = "";
+      } else {
+        currentLine = word;
+      }
+    }
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.join("\\n");
+};
+
 const escapeFfmpegText = (value: string) => {
   if (!value) return "";
   return String(value)
     .replace(/\\/g, "\\\\")
-    .replace(/'/g, "'\\\\''")
-    .replace(/%/g, "%%");
+    .replace(/'/g, "\\'")
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "%%")
+    .replace(/\r?\n/g, "\\n");
 };
 
 // Format font path safely for FFmpeg drawtext on Windows/Linux
@@ -62,7 +100,7 @@ const downloadFile = async (url: string, outputPath: string) => {
     const statusText = axiosError?.response?.statusText;
     const message = axiosError?.message || "Unknown download error";
     throw new Error(
-      `Failed to download ${url}: ${status || "no status"} ${statusText || message}`
+      `Failed to download ${url}: ${status || "no status"} ${statusText || message}`,
     );
   }
 };
@@ -87,7 +125,6 @@ export const renderQuranOverlay = async ({
   ayahNumber,
   arabicText,
   translationText,
-  surahName,
   onProgress,
 }: OverlayRenderParams): Promise<string> => {
   const jobDir = path.join(TMP_ROOT, String(jobId));
@@ -99,9 +136,7 @@ export const renderQuranOverlay = async ({
 
   const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
   if (!fs.existsSync(rawFontPath)) {
-    throw new Error(
-      `Arabic font file not found at ${rawFontPath}. Please ensure Amiri-Regular.ttf exists in src/fonts/`
-    );
+    throw new Error(`Arabic font file not found at ${rawFontPath}`);
   }
 
   const safeFontPath = formatFontPath(rawFontPath);
@@ -111,21 +146,21 @@ export const renderQuranOverlay = async ({
     downloadFile(audioUrl, audioPath),
   ]);
 
-  // Pre-shape the Arabic text before escaping
-  const reshapedArabic = shapeArabicText(arabicText);
-  const escapedArabicText = escapeFfmpegText(reshapedArabic);
-  const escapedTranslationText = escapeFfmpegText(translationText);
+  // Wrap and shape Arabic text
+  const wrappedArabic = wrapText(arabicText, 35);
+  const shapedArabic = shapeArabicText(wrappedArabic);
+  const escapedArabicText = escapeFfmpegText(shapedArabic);
 
-  console.log(`[renderQuranOverlay:${jobId}] Rendering overlay:`);
-  console.log(` - Arabic string length: ${arabicText?.length || 0}`);
-  console.log(` - Translation string length: ${translationText?.length || 0}`);
-  console.log(` - Font path: ${safeFontPath}`);
+  // Wrap and escape Translation text
+  const wrappedTranslation = wrapText(translationText, 45);
+  const escapedTranslationText = escapeFfmpegText(wrappedTranslation);
 
-  // Complex filter graph with shaped Arabic text and bounds safety
-  const arabicFilter = `drawtext=fontfile='${safeFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=48:box=1:boxcolor=black@0.5:boxborderw=10:x=(w-tw)/2:y=(h-th)/2.5:fix_bounds=1`;
-  const translationFilter = `drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=28:box=1:boxcolor=black@0.5:boxborderw=8:x=(w-tw)/2:y=(h-th)/1.6:fix_bounds=1`;
-
-  const filterGraph = `${arabicFilter},${translationFilter}`;
+  // Filter graph using setpts to fix timestamp reset during video playback
+  const filterGraph = [
+    `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
+    `[bg]drawtext=fontfile='${safeFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=48:line_spacing=14:x=(w-tw)/2:y=(h-th)/2.5:fix_bounds=1[v1]`,
+    `[v1]drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=28:line_spacing=10:x=(w-tw)/2:y=(h-th)/1.6:fix_bounds=1`,
+  ].join(";");
 
   return new Promise<string>((resolve, reject) => {
     let lastProgress = 0;
@@ -137,7 +172,7 @@ export const renderQuranOverlay = async ({
       .complexFilter(filterGraph)
       .outputOptions([
         "-map",
-        "0:v",
+        "[v1]",
         "-map",
         "1:a",
         "-c:v",
@@ -158,31 +193,8 @@ export const renderQuranOverlay = async ({
         "-y",
       ])
       .output(outputPath)
-      .on("start", (cmd) => {
-        console.log("Executing FFmpeg command:\n", cmd);
-      })
-      .on("stderr", (stderrLine) => {
-        if (
-          stderrLine.includes("drawtext") ||
-          stderrLine.includes("Filter") ||
-          stderrLine.includes("Error")
-        ) {
-          console.error("FFmpeg Filter Log:", stderrLine);
-        }
-      })
-      .on("progress", (progress) => {
-        if (!progress.percent) return;
-        const value = Math.min(100, Math.max(0, Math.round(progress.percent)));
-        if (value !== lastProgress) {
-          lastProgress = value;
-          onProgress?.(value);
-        }
-      })
       .on("end", () => resolve(outputPath))
-      .on("error", (err) => {
-        console.error("FFmpeg rendering error:", err);
-        reject(err);
-      });
+      .on("error", (err) => reject(err));
 
     command.run();
   });

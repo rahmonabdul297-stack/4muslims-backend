@@ -36,7 +36,26 @@ const cloudinaryUploader = (
     uploadStream.end(fileBuffer);
   });
 };
-
+export const uploadVideoToCloudinary = (
+  filePath: string,
+  folderName: string
+): Promise<UploadApiResponse> => {
+  return new Promise((resolve, reject) => {
+    cloudinary.uploader.upload_large(
+      filePath,
+      {
+        folder: folderName,
+        resource_type: "video", // Crucial: explicitly mark as video!
+        chunk_size: 6000000,   // Upload in 6MB chunks to prevent memory spikes
+        overwrite: true,
+      },
+      (error, result) => {
+        if (error || !result) return reject(error);
+        resolve(result);
+      }
+    );
+  });
+};
 const cloudinaryDestroyer = (publicId: string): Promise<any> => {
   return new Promise((resolve, reject) => {
     cloudinary.uploader.destroy(publicId, (error, result) => {

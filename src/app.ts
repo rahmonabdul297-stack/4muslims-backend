@@ -9,13 +9,11 @@ import VideoRoutes from "./routes/video-routes.ts";
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = 8888;
+const PORT = 9888;
 
 // middleware
-
 connectDB();
 app.use(express.json());
-
 // ... other routes
 app.use("/api/v1/admin", Admin);
 app.use("/api/v1/public", Public);

@@ -4,14 +4,15 @@ declare module "arabic-persian-reshaper" {
     convertHarakat?: boolean;
   }
 
-  export class ArabicReshaper {
+  export class ArabicShaper {
     constructor(options?: ReshaperOptions);
     static convertArabic(text: string): string;
     convertArabic(text: string): string;
   }
 
   const defaultExport: {
-    ArabicReshaper: typeof ArabicReshaper;
+    ArabicShaper: typeof ArabicShaper;
+    PersianShaper?: unknown;
   };
 
   export default defaultExport;
@@ -24,8 +25,14 @@ declare module "bidi-js" {
   }
 
   export interface BidiFactory {
-    getEmbeddingLevels(text: string, implicitDirection?: string): BidiEmbeddingLevels;
-    getReorderedString(text: string, embeddingLevels: BidiEmbeddingLevels): string;
+    getEmbeddingLevels(
+      text: string,
+      implicitDirection?: string,
+    ): BidiEmbeddingLevels;
+    getReorderedString(
+      text: string,
+      embeddingLevels: BidiEmbeddingLevels,
+    ): string;
   }
 
   export default function bidiFactory(): BidiFactory;
