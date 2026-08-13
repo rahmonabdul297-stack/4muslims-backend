@@ -18,9 +18,7 @@ export interface InitializePaystackParams {
   callbackUrl?: String;
 }
 
-/**
- * Initializes a transaction with Paystack API
- */
+
 export const initializePaystackTransaction = async ({
   email,
   amountInNaira,
@@ -30,7 +28,7 @@ export const initializePaystackTransaction = async ({
 }: InitializePaystackParams) => {
   const response = await paystackClient.post("/transaction/initialize", {
     email,
-    amount: amountInNaira * 100, // Paystack expects amount in Kobo
+    amount: amountInNaira * 100, 
     reference,
     callback_url: callbackUrl,
     metadata: {
@@ -38,5 +36,13 @@ export const initializePaystackTransaction = async ({
     },
   });
 
-  return response.data.data; // Returns { authorization_url, access_code, reference }
+  return response.data.data; 
+};
+
+
+export const verifyPaystackTransaction = async (reference: string) => {
+  const response = await paystackClient.get(
+    `/transaction/verify/${encodeURIComponent(reference)}`
+  );
+  return response.data.data;
 };

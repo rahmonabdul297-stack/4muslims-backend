@@ -3,7 +3,10 @@ import crypto from "crypto";
 import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
 import { User } from "../../models/User.ts";
 import { Payment } from "../../models/payment.ts";
-import { initializePaystackTransaction } from "../../services/payment.service.ts";
+import {
+  initializePaystackTransaction,
+  verifyPaystackTransaction,
+} from "../../services/payment.service.ts";
 
 export const checkOut = async (req: Request, res: Response) => {
   const userId = (req as any).id;
@@ -51,6 +54,41 @@ export const checkOut = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Checkout Error:", (error as Error).message);
+    return sendErrorResponse(res, (error as Error).message);
+  }
+};
+
+export const verifyPayment = async (req: Request, res: Response) => {
+  const { reference } = req.params;
+  if (!reference) {
+    return sendErrorResponse(res, "Transaction reference is required!");
+  }
+  try {
+    const payment = await Payment.findOne({ reference });
+    if (!payment) {
+      return sendErrorResponse(res, "Transaction reference not found!");
+    }
+    if (payment.status === "success") {
+      return sendSuccessResponse(res, "payment has already been verified!", {
+        reference: payment.reference,
+        status: payment.status,
+        plan: payment.plan,
+      });
+    }
+
+    const paystackData = await verifyPaystackTransaction(String(reference));
+
+    if (paystackData && paystackData.status === "success") {
+      payment.status = "success";
+      payment.paymentMethod = paystackData.channel;
+      payment.metadata = paystackData.metadata;
+      await payment.save();
+      await User.findByIdAndUpdate(payment.userId, {
+        isPremium: true,
+      });
+    }
+  } catch (error) {
+    console.error((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);
   }
 };
