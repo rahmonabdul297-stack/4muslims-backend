@@ -92,3 +92,39 @@ export const verifyPayment = async (req: Request, res: Response) => {
     return sendErrorResponse(res, (error as Error).message);
   }
 };
+
+export const paystackWebhook = async (req: Request, res: Response) => {
+  try {
+    const secret = process.env.PAYSTACK_SECRET_KEY || "";
+
+    const hash = crypto
+      .createHmac("sha512", secret)
+      .update(JSON.stringify(req.body))
+      .digest("hex");
+    if (hash !== req.headers["x-paystack-signature"]) {
+      return res.status(401).send("Invalid Webhook Signature");
+    }
+
+    const { event, data } = req.body;
+    if (event === "charge.success") {
+      const { reference, channel } = data;
+      const payment = await Payment.findOne({ reference });
+      if (payment && payment.status !== "success") {
+        payment.status = "success";
+        payment.paymentMethod = channel;
+        await payment.save();
+        await User.findByIdAndUpdate(payment.userId, {
+          isPremium: true,
+        });
+
+        console.log(
+          `Webhook processed successfully for User ID: ${payment.userId}`,
+        );
+      }
+    }
+    return res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Webhook processing error:", (error as Error).message);
+    return res.status(500).send("Webhook internal error");
+  }
+};
