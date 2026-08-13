@@ -1,14 +1,10 @@
-// import { Router } from "express";
-// import {
-//     handlePaystackWebhook,
-//   initializePayment,
-//   verifyPayment,
-// } from "../../controllers/payments/payment.ts";
-// import { verifyUserLoginToken } from "../../utils/helper.ts";
+import { Router } from "express";
 
-// const router = Router();
-// // payment gateway
-// router.post("/initialize", verifyUserLoginToken, initializePayment);
-// router.get("/verify/:reference", verifyUserLoginToken, verifyPayment);
-// router.get("/webhook", handlePaystackWebhook);
-// export default router;
+import { verifyUserLoginToken } from "../../utils/helper.ts";
+import { checkOut } from "../../controllers/payments/payment.ts";
+
+const router = Router();
+// payment gateway
+router.post("/checkout", verifyUserLoginToken, checkOut);
+
+export default router;

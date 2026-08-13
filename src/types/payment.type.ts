@@ -1,8 +1,8 @@
 export interface paymentTypes {
   userId: String;
   reference: string;
-  plan:"monthly" | "yearly";
-  amount: number; 
+  plan: "monthly" | "yearly";
+  amount: number;
   currency: string;
   status: "pending" | "success" | "failed";
   paymentMethod?: string;
