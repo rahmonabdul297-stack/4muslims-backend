@@ -14,6 +14,7 @@ const PORT = 9888;
 // middleware
 connectDB();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 // ... other routes
 app.use("/api/v1/admin", Admin);
 app.use("/api/v1/public", Public);

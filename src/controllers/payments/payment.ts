@@ -95,33 +95,45 @@ export const verifyPayment = async (req: Request, res: Response) => {
 
 export const paystackWebhook = async (req: Request, res: Response) => {
   try {
+    // 1. Guard against empty/undefined body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).send("Empty request body");
+    }
+
     const secret = process.env.PAYSTACK_SECRET_KEY || "";
+
+    // Safely stringify the body
+    const bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
 
     const hash = crypto
       .createHmac("sha512", secret)
-      .update(JSON.stringify(req.body))
+      .update(bodyData)
       .digest("hex");
+
     if (hash !== req.headers["x-paystack-signature"]) {
       return res.status(401).send("Invalid Webhook Signature");
     }
 
     const { event, data } = req.body;
+
     if (event === "charge.success") {
       const { reference, channel } = data;
+
       const payment = await Payment.findOne({ reference });
+
       if (payment && payment.status !== "success") {
         payment.status = "success";
         payment.paymentMethod = channel;
         await payment.save();
+
         await User.findByIdAndUpdate(payment.userId, {
           isPremium: true,
         });
 
-        console.log(
-          `Webhook processed successfully for User ID: ${payment.userId}`,
-        );
+        console.log(`✅ Webhook processed successfully for User ID: ${payment.userId}`);
       }
     }
+
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook processing error:", (error as Error).message);
