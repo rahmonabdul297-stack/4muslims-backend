@@ -5,10 +5,16 @@ import {
   generatedVideoHistory,
   getVideoStatus,
 } from "../controllers/video.controller.ts";
+import { checkAndDeductUsage } from "../controllers/user/generate-video.ts";
 
 const router = Router();
 
-router.post("/custom", verifyUserLoginToken, generateCustomVideo);
+router.post(
+  "/custom",
+  verifyUserLoginToken,
+  checkAndDeductUsage,
+  generateCustomVideo,
+);
 router.get("/status/:jobId", getVideoStatus);
 router.get("/history", verifyUserLoginToken, generatedVideoHistory);
 

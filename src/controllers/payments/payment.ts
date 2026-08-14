@@ -7,6 +7,7 @@ import {
   initializePaystackTransaction,
   verifyPaystackTransaction,
 } from "../../services/payment.service.ts";
+const secret = process.env.PAYSTACK_SECRET_KEY;
 
 export const checkOut = async (req: Request, res: Response) => {
   const userId = (req as any).id;
@@ -60,20 +61,26 @@ export const checkOut = async (req: Request, res: Response) => {
 
 export const verifyPayment = async (req: Request, res: Response) => {
   const { reference } = req.params;
+
   if (!reference) {
     return sendErrorResponse(res, "Transaction reference is required!");
   }
+
   try {
     const payment = await Payment.findOne({ reference });
+
     if (!payment) {
       return sendErrorResponse(res, "Transaction reference not found!");
     }
     if (payment.status === "success") {
-      return sendSuccessResponse(res, "payment has already been verified!", {
-        reference: payment.reference,
-        status: payment.status,
-        plan: payment.plan,
-      });
+      return sendSuccessResponse(
+        res,
+        "Payment already verified successfully.",
+        {
+          reference: payment.reference,
+          status: payment.status,
+        },
+      );
     }
 
     const paystackData = await verifyPaystackTransaction(String(reference));
@@ -81,37 +88,59 @@ export const verifyPayment = async (req: Request, res: Response) => {
     if (paystackData && paystackData.status === "success") {
       payment.status = "success";
       payment.paymentMethod = paystackData.channel;
-      payment.metadata = paystackData.metadata;
       await payment.save();
-      await User.findByIdAndUpdate(payment.userId, {
-        isPremium: true,
-      });
+      const user = await User.findById(payment.userId);
+      if (user) {
+        const now = new Date();
+        const durationInDays = payment.plan === "yearly" ? 365 : 30;
+
+        const currentExpiry =
+          user.premiumExpiresAt && new Date(user.premiumExpiresAt) > now
+            ? new Date(user.premiumExpiresAt)
+            : now;
+
+        const newExpiryDate = new Date(
+          currentExpiry.getTime() + durationInDays * 24 * 60 * 60 * 1000,
+        );
+
+        await User.findByIdAndUpdate(payment.userId, {
+          isPremium: true,
+          premiumExpiresAt: newExpiryDate,
+        });
+      }
+
+      return sendSuccessResponse(
+        res,
+        "Payment verified successfully! Account upgraded.",
+        { reference: payment.reference, status: payment.status },
+      );
+    } else {
+      payment.status = "failed";
+      await payment.save();
+      return sendErrorResponse(res, "Payment failed or was declined.");
     }
   } catch (error) {
-    console.error((error as Error).message);
+    console.error("Verification Error:", (error as Error).message);
     return sendErrorResponse(res, (error as Error).message);
   }
 };
-
-export const paystackWebhook = async (req: Request, res: Response) => {
+export const paymentWebhook = async (req: Request, res: Response) => {
   try {
-    // 1. Guard against empty/undefined body
     if (!req.body || Object.keys(req.body).length === 0) {
-      return res.status(400).send("Empty request body");
+      return sendErrorResponse(res, "field are required!");
     }
 
-    const secret = process.env.PAYSTACK_SECRET_KEY || "";
-
-    // Safely stringify the body
-    const bodyData = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+    // 1. Use the raw unparsed buffer for hashing if available
+    const rawData = (req as any).rawBody || JSON.stringify(req.body);
 
     const hash = crypto
-      .createHmac("sha512", secret)
-      .update(bodyData)
+      .createHmac("sha512", String(secret))
+      .update(rawData)
       .digest("hex");
 
+    // 2. Validate signature
     if (hash !== req.headers["x-paystack-signature"]) {
-      return res.status(401).send("Invalid Webhook Signature");
+      return sendErrorResponse(res, "Invalid Webhook Signature");
     }
 
     const { event, data } = req.body;
@@ -130,13 +159,15 @@ export const paystackWebhook = async (req: Request, res: Response) => {
           isPremium: true,
         });
 
-        console.log(`✅ Webhook processed successfully for User ID: ${payment.userId}`);
+        console.log(
+          `Webhook processed successfully for User ID: ${payment.userId}`,
+        );
       }
     }
 
     return res.status(200).send("Webhook received");
   } catch (error) {
     console.error("Webhook processing error:", (error as Error).message);
-    return res.status(500).send("Webhook internal error");
+    return sendErrorResponse(res, "webhook internal err-");
   }
 };

@@ -35,6 +35,35 @@ const UserSchema = new Schema<UserTypes>({
   },
   premiumExpiresAt: {
     type: Date,
+    default: null,
+  },
+  freeUsageCount: {
+    type: Number,
+    default: 0,
+  },
+  lastUsageReset: {
+    type: Date,
+    default: Date.now,
+  },
+  socialTokens: {
+    youtube: {
+      accessToken: { type: String, default: null },
+      refreshToken: { type: String, default: null },
+    },
+    instagram: {
+      accessToken: { type: String, default: null },
+      instagramAccountId: { type: String, default: null },
+    },
+  },
+
+  autoPostSettings: {
+    enabled: { type: Boolean, default: false },
+    postFrequency: {
+      type: String,
+      enum: ["daily", "weekly"],
+      default: "daily",
+    },
+    platforms: [{ type: String, enum: ["youtube", "instagram"] }],
   },
   createdAt: {
     type: Date,
