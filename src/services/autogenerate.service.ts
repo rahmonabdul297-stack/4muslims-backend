@@ -27,7 +27,7 @@ export const generateQuranContent = async (): Promise<QuranContent> => {
     `Quranic Reflection: Surah ${surahName} [Verse ${ayahNumber}]\n\n` +
     `Arabic:\n${uthmaniText}\n\n` +
     `Translation:\n"${translationText}"\n\n` +
-    `May Allah grant us wisdom and peace through the Holy Quran. 🤲\n\n` +
+    `May Allah grant us wisdom and peace through the Holy Quran.\n\n` +
     `#Quran #Islam #Surah${surahName.replace(/\s+/g, "")} #IslamicReminders #Muslim #Sunnah #Deen #Allah`;
 
   return {

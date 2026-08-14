@@ -213,10 +213,47 @@ export const shapeArabicText = (text: string): string => {
   // 1. Join isolated Arabic characters into connected cursive forms
   const joinedText = reshaper.ArabicShaper.convertArabic(text);
 
- return joinedText
+  return joinedText
     .split("\n")
-    .map(line => line.split("").reverse().join(""))
+    .map((line) => line.split("").reverse().join(""))
     .join("\n");
 };
 
+export const requirePremium = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const user = (req as any).id;
+    if (!user) {
+      res.status(401).json({
+        success: false,
+        message: "Unauthorized: User authentication required.",
+      });
+      return;
+    }
 
+    if (user.isPremium === false) {
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: This feature requires a Premium subscription.",
+      });
+      return;
+    }
+
+    if (user.premiumExpiresAt && new Date(user.premiumExpiresAt) < new Date()) {
+      user.isPremium = false;
+      await user.save();
+
+      res.status(403).json({
+        success: false,
+        message: "Forbidden: Your Premium subscription has expired.",
+      });
+      return;
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
