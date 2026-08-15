@@ -8,19 +8,27 @@ import type {
 } from "./types/cloudinary.types.ts";
 const cloudinary = cloud.v2;
 
-const cloud_name = process.env.CLOUD_NAME;
-const api_key = process.env.CLOUD_API_KEY;
-const api_secret = process.env.CLOUD_API_SECRET;
-if (!cloud_name || !api_key || !api_secret) {
-  throw new Error("something is missing, check your cloudinary config!.");
-}
-cloudinary.config({
-  cloud_name: cloud_name,
-  api_key: api_key,
-  api_secret: api_secret,
-  secure: true,
-  timeout: 120000,
-});
+const applyCloudinaryConfig = () => {
+  const cloudName = process.env.CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUD_API_KEY?.trim();
+  const apiSecret = process.env.CLOUD_API_SECRET?.trim();
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error(
+      "Cloudinary config missing: CLOUD_NAME, CLOUD_API_KEY, and CLOUD_API_SECRET must be set.",
+    );
+  }
+
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+    timeout: 120000,
+  });
+};
+
+applyCloudinaryConfig();
 
 const cloudinaryUploader = (
   fileBuffer: Buffer,

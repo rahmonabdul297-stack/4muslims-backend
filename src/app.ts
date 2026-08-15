@@ -11,17 +11,25 @@ import connectDB from "./db/index.ts";
 const app = express();
 const PORT = 9999;
 
-// middleware
-connectDB();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-// ... other routes
-app.use("/api/v1/admin", Admin);
-app.use("/api/v1/public", Public);
-app.use("/api/v1/auth", UserAuth);
-app.use("/api/v1/profile", UserProfile);
-app.use("/api/v1/videos", VideoRoutes);
-app.use("/api/v1/payments", paymentRoutes);
-app.listen(PORT, () => {
-  console.log(`Server is up and running on http://localhost:${PORT}`);
+const startServer = async () => {
+  await connectDB();
+
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+  // ... other routes
+  app.use("/api/v1/admin", Admin);
+  app.use("/api/v1/public", Public);
+  app.use("/api/v1/auth", UserAuth);
+  app.use("/api/v1/profile", UserProfile);
+  app.use("/api/v1/videos", VideoRoutes);
+  app.use("/api/v1/payments", paymentRoutes);
+
+  app.listen(PORT, () => {
+    console.log(`Server is up and running on http://localhost:${PORT}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
 });

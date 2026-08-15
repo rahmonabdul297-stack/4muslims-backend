@@ -12,6 +12,28 @@ import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
 
+const ensureCloudinaryConfig = () => {
+  const cloudName = process.env.CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUD_API_KEY?.trim();
+  const apiSecret = process.env.CLOUD_API_SECRET?.trim();
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error(
+      "Cloudinary config missing: CLOUD_NAME, CLOUD_API_KEY, and CLOUD_API_SECRET must be set.",
+    );
+  }
+
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+    timeout: 120000,
+  });
+};
+
+ensureCloudinaryConfig();
+
 ffmpeg.setFfmpegPath(ffmpegStatic as any);
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 
@@ -95,8 +117,11 @@ export interface OverlayRenderParams {
   jobId: string;
   videoUrl: string;
   audioUrl: string;
+  surahNumber: number | undefined;
+  ayahNumber: number | undefined;
   arabicText: string;
   translationText: string;
+  surahName: string | undefined;
   onProgress?: (progress: number) => Promise<void> | void;
 }
 
@@ -104,8 +129,11 @@ export const renderQuranOverlay = async ({
   jobId,
   videoUrl,
   audioUrl,
+  surahNumber,
+  ayahNumber,
   arabicText,
   translationText,
+  surahName,
   onProgress,
 }: OverlayRenderParams): Promise<string> => {
   const duration = await getAudioDuration(audioUrl);
@@ -139,7 +167,7 @@ export const renderQuranOverlay = async ({
         resource_type: "video",
         folder: "quran_generated_videos",
         format: "mp4",
-        chunk_size: 1048576, // 1MB chunk size
+        chunk_size: 6 * 1024 * 1024, // Cloudinary requires all non-final chunks to be >= 5MB
       },
       (error, result) => {
         clearTimeout(watchdogTimeout);

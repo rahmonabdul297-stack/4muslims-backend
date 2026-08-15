@@ -6,7 +6,10 @@ import {
   getVideoStatus,
 } from "../controllers/video.controller.ts";
 import { checkAndDeductUsage } from "../controllers/user/generate-video.ts";
-import { triggerQuranAutoPost, updateAutoPostSettings } from "../controllers/autoposter.controller.ts";
+import {
+  triggerQuranAutoPost,
+  updateAutoPostSettings,
+} from "../controllers/autoposter.controller.ts";
 
 const router = Router();
 
@@ -19,9 +22,19 @@ router.post(
 router.get("/status/:jobId", getVideoStatus);
 router.get("/history", verifyUserLoginToken, generatedVideoHistory);
 
-router.put("/settings", verifyUserLoginToken, requirePremium, updateAutoPostSettings);
+router.put(
+  "/settings",
+  verifyUserLoginToken,
+  requirePremium,
+  updateAutoPostSettings,
+);
 
 // Trigger manual automated post
-router.post("/trigger", verifyUserLoginToken, requirePremium, triggerQuranAutoPost);
+router.post(
+  "/trigger",
+  verifyUserLoginToken,
+  requirePremium,
+  triggerQuranAutoPost,
+);
 
 export default router;
