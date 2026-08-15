@@ -35,11 +35,20 @@ const bidi = bidiFactory();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Reshapes Arabic letters and handles Right-To-Left ordering correctly for FFmpeg drawtext
+ */
 export const shapeArabicText = (text: string): string => {
   if (!text) return "";
+  // 1. Connect Arabic letters (initial, medial, final forms)
   const joinedText = reshaper.ArabicShaper.convertArabic(text);
+
+  // 2. Process BiDi embedding
   const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
-  return bidi.getReorderedString(joinedText, embeddingLevels);
+  const reordered = bidi.getReorderedString(joinedText, embeddingLevels);
+
+  // 3. Reverse string sequence so FFmpeg's LTR renderer displays it as RTL
+  return reordered.split("").reverse().join("");
 };
 
 const chunkString = (value: string, chunkSize: number) => {
@@ -50,7 +59,7 @@ const chunkString = (value: string, chunkSize: number) => {
   return chunks;
 };
 
-const wrapText = (text: string, maxChars = 32): string => {
+const wrapText = (text: string, maxChars = 35): string => {
   if (!text) return "";
   const words = text.trim().split(/\s+/);
   const lines: string[] = [];
@@ -80,7 +89,7 @@ const wrapText = (text: string, maxChars = 32): string => {
     lines.push(currentLine);
   }
 
-  return lines.join("\\n");
+  return lines.join("\n");
 };
 
 const escapeFfmpegText = (value: string) => {
@@ -95,10 +104,6 @@ const escapeFfmpegText = (value: string) => {
 
 const formatFontPath = (fontPath: string) => {
   return fontPath.replace(/\\/g, "/").replace(/:/g, "\\:");
-};
-
-const padThree = (num: number): string => {
-  return String(num).padStart(3, "0");
 };
 
 const cleanUrl = (url: string): string => {
@@ -124,8 +129,6 @@ export const renderQuranOverlay = ({
   jobId,
   videoUrl: rawVideoUrl,
   audioUrl: rawAudioUrl,
-  surahNumber,
-  ayahNumber,
   arabicText,
   translationText,
   onProgress,
@@ -134,28 +137,25 @@ export const renderQuranOverlay = ({
     const videoUrl = cleanUrl(rawVideoUrl);
     const audioUrl = cleanUrl(rawAudioUrl);
 
-    const sPadded = padThree(surahNumber);
-    const aPadded = padThree(ayahNumber);
-    const ayahImageUrl = `https://static.quran.com/images/medina_script/ayhs/${sPadded}_${aPadded}.png`;
-
     const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
     if (!fs.existsSync(rawFontPath)) {
-      return reject(new Error(`Translation font file not found at ${rawFontPath}`));
+      return reject(new Error(`Font file not found at ${rawFontPath}`));
     }
     const safeFontPath = formatFontPath(rawFontPath);
 
-    // Wrapped to 32 chars max per line for better vertical stacking on mobile videos
+    // Shape & Reverse Arabic text for proper RTL display in FFmpeg
+    const shapedArabic = shapeArabicText(arabicText);
+    const escapedArabicText = escapeFfmpegText(shapedArabic);
+
+    // Wrap & Escape Translation text
     const wrappedTranslation = wrapText(translationText, 32);
     const escapedTranslationText = escapeFfmpegText(wrappedTranslation);
 
-    // Filter Graph updates:
-    // 1. scale=main_w*0.88:-1 -> Scales Quran image dynamically to 88% of the video canvas width
-    // 2. fontsize=40, borderw=2 -> Enlarges translation text and adds border/stroke for bold appearance
+    // FFmpeg Filter Graph
     const filterGraph = [
       `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
-      `[2:v]scale=w='min(iw,main_w*0.88)':h=-1[quran_img]`,
-      `[bg][quran_img]overlay=x=(W-w)/2:y=(H-h)/3.2:format=auto[v1]`,
-      `[v1]drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=40:line_spacing=12:bordercolor=black@0.6:borderw=2:x=(w-tw)/2:y=(h-th)/1.45:fix_bounds=1[outv]`,
+      `[bg]drawtext=fontfile='${safeFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=50:line_spacing=18:bordercolor=black@0.7:borderw=3:x=(w-tw)/2:y=(h-th)/3:fix_bounds=1[v1]`,
+      `[v1]drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=36:line_spacing=14:bordercolor=black@0.7:borderw=2:x=(w-tw)/2:y=(h-th)/1.45:fix_bounds=1[outv]`,
     ].join(";");
 
     const passthrough = new PassThrough();
@@ -165,6 +165,7 @@ export const renderQuranOverlay = ({
         resource_type: "video",
         folder: "quran_generated_videos",
         format: "mp4",
+        chunk_size: 6000000,
       },
       (error, result) => {
         if (error) {
@@ -186,7 +187,6 @@ export const renderQuranOverlay = ({
       .input(videoUrl)
       .inputOptions(["-stream_loop", "-1"])
       .input(audioUrl)
-      .input(ayahImageUrl)
       .complexFilter(filterGraph)
       .outputOptions([
         "-map",
