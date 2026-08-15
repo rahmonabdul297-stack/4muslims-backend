@@ -72,6 +72,9 @@ const initWorker = async () => {
         reciterName: reciterConfig.name,
       });
 
+      // Track last reported progress percentage to avoid spamming MongoDB
+      let lastReportedProgress = 10;
+
       try {
         const outputUrl = await renderQuranOverlay({
           jobId,
@@ -83,11 +86,21 @@ const initWorker = async () => {
           translationText: payload.translationText,
           surahName: payload.surahName,
           onProgress: async (progress) => {
-            await updateRenderStatus(payload.mongoRenderId, {
-              progress,
-            });
+            // Only write to DB & Redis if the integer percentage has actually increased
+            if (progress > lastReportedProgress) {
+              lastReportedProgress = progress;
+
+              // 1. Send heartbeat to BullMQ so the lock doesn't stall
+              await job.updateProgress(progress);
+
+              // 2. Update MongoDB asynchronously without blocking execution
+              updateRenderStatus(payload.mongoRenderId, { progress }).catch(
+                (err) => console.error("Failed to update progress in DB:", err),
+              );
+            }
           },
         });
+
         await updateRenderStatus(payload.mongoRenderId, {
           status: "completed",
           progress: 100,
@@ -109,8 +122,9 @@ const initWorker = async () => {
     },
     {
       connection: redisConnection,
-      concurrency: 2,
-      lockDuration: 300000,
+      concurrency: 1, // Recommended: set to 1 unless running on 4+ core dedicated CPUs
+      lockDuration: 300000, // 5 minutes
+      lockRenewTime: 15000, // Automatically renew Redis lock every 15 seconds
       stalledInterval: 30000,
       maxStalledCount: 2,
     },

@@ -1,182 +1,158 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import { PassThrough } from "stream";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
-import { PassThrough } from "stream";
+import os from "os";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "@ffprobe-installer/ffprobe";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
 
-const cloudName = process.env.CLOUD_NAME;
-const apiKey = process.env.CLOUD_API_KEY;
-const apiSecret = process.env.CLOUD_API_SECRET;
-
-if (!cloudName || !apiKey || !apiSecret) {
-  throw new Error(
-    "Cloudinary configuration is missing. Check CLOUD_NAME, CLOUD_API_KEY, and CLOUD_API_SECRET.",
-  );
-}
-
-cloudinary.config({
-  cloud_name: cloudName,
-  api_key: apiKey,
-  api_secret: apiSecret,
-  secure: true,
-});
-
 ffmpeg.setFfmpegPath(ffmpegStatic as any);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 const bidi = bidiFactory();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-/**
- * Reshapes Arabic letters and handles Right-To-Left ordering correctly for FFmpeg drawtext
- */
 export const shapeArabicText = (text: string): string => {
   if (!text) return "";
-  // 1. Connect Arabic letters (initial, medial, final forms)
   const joinedText = reshaper.ArabicShaper.convertArabic(text);
-
-  // 2. Process BiDi embedding
   const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
   const reordered = bidi.getReorderedString(joinedText, embeddingLevels);
-
-  // 3. Reverse string sequence so FFmpeg's LTR renderer displays it as RTL
   return reordered.split("").reverse().join("");
 };
 
-const chunkString = (value: string, chunkSize: number) => {
+const splitTextIntoChunks = (text: string, maxWordsPerChunk = 7): string[] => {
+  const words = text.trim().split(/\s+/);
   const chunks: string[] = [];
-  for (let i = 0; i < value.length; i += chunkSize) {
-    chunks.push(value.slice(i, i + chunkSize));
+  for (let i = 0; i < words.length; i += maxWordsPerChunk) {
+    chunks.push(words.slice(i, i + maxWordsPerChunk).join(" "));
   }
   return chunks;
 };
 
-const wrapText = (text: string, maxChars = 35): string => {
-  if (!text) return "";
-  const words = text.trim().split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = "";
+const formatSrtTime = (seconds: number): string => {
+  const pad = (num: number, size = 2) => String(num).padStart(size, "0");
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const millis = Math.floor((seconds % 1) * 1000);
 
-  for (const word of words) {
-    if (!currentLine) {
-      currentLine = word;
-      continue;
-    }
+  return `${pad(hrs)}:${pad(mins)}:${pad(secs)},${String(millis).padStart(3, "0")}`;
+};
 
-    const nextLength = currentLine.length + 1 + word.length;
-    if (nextLength <= maxChars) {
-      currentLine = `${currentLine} ${word}`;
-    } else {
-      lines.push(currentLine);
-      if (word.length > maxChars) {
-        lines.push(...chunkString(word, maxChars));
-        currentLine = "";
-      } else {
-        currentLine = word;
+const generateInMemorySrt = (
+  arabicText: string,
+  translationText: string,
+  totalDuration: number,
+): string => {
+  const arabicChunks = splitTextIntoChunks(arabicText, 6);
+  const translationChunks = splitTextIntoChunks(translationText, 8);
+
+  const totalSegments = Math.max(arabicChunks.length, translationChunks.length);
+  const segmentDuration = totalDuration / totalSegments;
+
+  let srtContent = "";
+
+  for (let i = 0; i < totalSegments; i++) {
+    const startTime = i * segmentDuration;
+    const endTime = (i + 1) * segmentDuration;
+
+    const rawArabic = arabicChunks[i] || arabicChunks[arabicChunks.length - 1];
+    const shapedArabic = shapeArabicText(String(rawArabic));
+    const translation =
+      translationChunks[i] || translationChunks[translationChunks.length - 1];
+
+    srtContent += `${i + 1}\n`;
+    srtContent += `${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n`;
+    srtContent += `${shapedArabic}\n${translation}\n\n`;
+  }
+
+  return srtContent;
+};
+
+export const getAudioDuration = (audioUrl: string): Promise<number> => {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(audioUrl, (err, metadata) => {
+      if (err) {
+        return reject(
+          new Error(`Failed to probe audio duration: ${err.message}`),
+        );
       }
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return lines.join("\n");
-};
-
-const escapeFfmpegText = (value: string) => {
-  if (!value) return "";
-  return String(value)
-    .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
-    .replace(/:/g, "\\:")
-    .replace(/%/g, "%%")
-    .replace(/\r?\n/g, "\\n");
-};
-
-const formatFontPath = (fontPath: string) => {
-  return fontPath.replace(/\\/g, "/").replace(/:/g, "\\:");
-};
-
-const cleanUrl = (url: string): string => {
-  if (!url) return "";
-  const normalized = url.replace(/\\/g, "/");
-  const match = normalized.match(/(https?:\/\/.+)/i);
-  return match?.[1] ?? normalized;
+      const duration = metadata.format?.duration;
+      if (!duration || isNaN(duration)) {
+        return reject(new Error("Unable to determine audio track duration."));
+      }
+      resolve(duration);
+    });
+  });
 };
 
 export interface OverlayRenderParams {
   jobId: string;
   videoUrl: string;
   audioUrl: string;
-  surahNumber: number;
-  ayahNumber: number;
   arabicText: string;
   translationText: string;
-  surahName?: string | undefined;
   onProgress?: (progress: number) => Promise<void> | void;
 }
 
-export const renderQuranOverlay = ({
+export const renderQuranOverlay = async ({
   jobId,
-  videoUrl: rawVideoUrl,
-  audioUrl: rawAudioUrl,
+  videoUrl,
+  audioUrl,
   arabicText,
   translationText,
   onProgress,
 }: OverlayRenderParams): Promise<string> => {
+  const duration = await getAudioDuration(audioUrl);
+  const srtContent = generateInMemorySrt(arabicText, translationText, duration);
+
+  const tempSrtPath = path.join(os.tmpdir(), `sub_${jobId}_${Date.now()}.srt`);
+  await fs.promises.writeFile(tempSrtPath, srtContent, "utf8");
+
+  const escapedSrtPath = tempSrtPath.replace(/\\/g, "/").replace(/:/g, "\\:");
+
   return new Promise<string>((resolve, reject) => {
-    const videoUrl = cleanUrl(rawVideoUrl);
-    const audioUrl = cleanUrl(rawAudioUrl);
+    let isFinished = false;
 
-    const rawFontPath = path.join(__dirname, "../fonts/Amiri-Regular.ttf");
-    if (!fs.existsSync(rawFontPath)) {
-      return reject(new Error(`Font file not found at ${rawFontPath}`));
-    }
-    const safeFontPath = formatFontPath(rawFontPath);
+    const cleanupTempFile = () => {
+      fs.unlink(tempSrtPath, () => {});
+    };
 
-    // Shape & Reverse Arabic text for proper RTL display in FFmpeg
-    const shapedArabic = shapeArabicText(arabicText);
-    const escapedArabicText = escapeFfmpegText(shapedArabic);
-
-    // Wrap & Escape Translation text
-    const wrappedTranslation = wrapText(translationText, 32);
-    const escapedTranslationText = escapeFfmpegText(wrappedTranslation);
-
-    // FFmpeg Filter Graph
-    const filterGraph = [
-      `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
-      `[bg]drawtext=fontfile='${safeFontPath}':text='${escapedArabicText}':fontcolor=white:fontsize=50:line_spacing=18:bordercolor=black@0.7:borderw=3:x=(w-tw)/2:y=(h-th)/3:fix_bounds=1[v1]`,
-      `[v1]drawtext=fontfile='${safeFontPath}':text='${escapedTranslationText}':fontcolor=white:fontsize=36:line_spacing=14:bordercolor=black@0.7:borderw=2:x=(w-tw)/2:y=(h-th)/1.45:fix_bounds=1[outv]`,
-    ].join(";");
+    // Watchdog timeout: Fail job if render takes longer than 5 minutes
+    const watchdogTimeout = setTimeout(() => {
+      if (!isFinished) {
+        isFinished = true;
+        cleanupTempFile();
+        reject(new Error("Render operation timed out after 5 minutes"));
+      }
+    }, 300000);
 
     const passthrough = new PassThrough();
 
-    const uploadStream = cloudinary.uploader.upload_stream(
+    const uploadStream = cloudinary.uploader.upload_chunked_stream(
       {
         resource_type: "video",
         folder: "quran_generated_videos",
         format: "mp4",
-        chunk_size: 6000000,
+        chunk_size: 1048576, // 1MB chunk size
       },
       (error, result) => {
-        if (error) {
-          console.error("[Cloudinary Stream Error]:", error);
-          return reject(error);
-        }
-        if (!result?.secure_url) {
+        clearTimeout(watchdogTimeout);
+        cleanupTempFile();
+        if (isFinished) return;
+        isFinished = true;
+
+        if (error) return reject(error);
+        if (!result?.secure_url)
           return reject(
-            new Error("Cloudinary upload did not return a secure URL"),
+            new Error("Cloudinary upload failed: missing secure_url"),
           );
-        }
+
         resolve(result.secure_url);
       },
     );
@@ -187,7 +163,10 @@ export const renderQuranOverlay = ({
       .input(videoUrl)
       .inputOptions(["-stream_loop", "-1"])
       .input(audioUrl)
-      .complexFilter(filterGraph)
+      .complexFilter([
+        `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
+        `[bg]subtitles='${escapedSrtPath}':force_style='Fontsize=28,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=60'[outv]`,
+      ])
       .outputOptions([
         "-map",
         "[outv]",
@@ -197,37 +176,80 @@ export const renderQuranOverlay = ({
         "libx264",
         "-preset",
         "ultrafast",
+        "-threads",
+        "2",
         "-crf",
-        "23",
+        "28",
         "-c:a",
         "aac",
         "-b:a",
-        "192k",
+        "128k",
         "-pix_fmt",
         "yuv420p",
         "-shortest",
+        "-max_muxing_queue_size",
+        "1024",
         "-f",
         "mp4",
         "-movflags",
         "frag_keyframe+empty_moov+default_base_moof",
       ]);
 
+    let lastProgressTime = 0;
+
     if (onProgress) {
       command.on("progress", (progress) => {
-        if (progress.percent) {
-          const percent = Math.min(Math.round(progress.percent), 99);
-          Promise.resolve(onProgress(percent)).catch((err) =>
-            console.error("Progress callback error:", err),
-          );
+        const now = Date.now();
+        // Throttle callback updates to max once per second
+        if (now - lastProgressTime > 1000) {
+          lastProgressTime = now;
+          let percent = 0;
+
+          if (progress.percent && !isNaN(progress.percent)) {
+            percent = Math.min(Math.round(progress.percent), 99);
+          } else if (progress.timemark && duration > 0) {
+            const parts = progress.timemark.split(":");
+            if (parts.length === 3) {
+              const hours = parseFloat(parts[0] ?? "0") || 0;
+              const minutes = parseFloat(parts[1] ?? "0") || 0;
+              const seconds = parseFloat(parts[2] ?? "0") || 0;
+
+              const currentSecs = hours * 3600 + minutes * 60 + seconds;
+              percent = Math.min(
+                Math.round((currentSecs / duration) * 100),
+                99,
+              );
+            }
+          }
+
+          if (percent > 0) {
+            try {
+              Promise.resolve(onProgress(percent)).catch((err) =>
+                console.error("Progress callback non-fatal error:", err),
+              );
+            } catch (err) {
+              console.error("Sync progress callback error:", err);
+            }
+          }
         }
       });
     }
+    command.on("end", () => {
+      console.log(
+        `[FFmpeg]: Render completed for job ${jobId}. Ending stream...`,
+      );
+      passthrough.end();
+    });
 
     command.on("error", (err) => {
+      clearTimeout(watchdogTimeout);
+      cleanupTempFile();
+      if (isFinished) return;
+      isFinished = true;
       console.error("[FFmpeg Stream Error]:", err);
       reject(err);
     });
 
-    command.pipe(passthrough, { end: true });
+    command.pipe(passthrough, { end: false });
   });
 };

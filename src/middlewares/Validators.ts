@@ -29,13 +29,7 @@ const ValidateOTP = [
     .withMessage("The OTP must be 6 character"),
 ];
 
-const validateCheckout = [
-  body("cartId").isMongoId().withMessage("Valid Cart ID is required"),
-  body("addressId")
-    .optional()
-    .isMongoId()
-    .withMessage("Invalid Address ID format"),
-];
+
 
 export {
   ValidateNewUserDetails,
@@ -44,5 +38,4 @@ export {
   ValidatePhone,
   ValidatePasswordReset,
   ValidateOTP,
-  validateCheckout,
 };
