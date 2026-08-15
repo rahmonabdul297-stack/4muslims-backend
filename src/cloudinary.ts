@@ -1,3 +1,5 @@
+import dotenv from "dotenv";
+dotenv.config();
 import cloud, { type UploadApiResponse } from "cloudinary";
 import type {
   CloudinaryUploadResponse,
@@ -38,7 +40,7 @@ const cloudinaryUploader = (
 };
 export const uploadVideoToCloudinary = (
   filePath: string,
-  folderName: string
+  folderName: string,
 ): Promise<UploadApiResponse> => {
   return new Promise((resolve, reject) => {
     cloudinary.uploader.upload_large(
@@ -46,13 +48,13 @@ export const uploadVideoToCloudinary = (
       {
         folder: folderName,
         resource_type: "video", // Crucial: explicitly mark as video!
-        chunk_size: 6000000,   // Upload in 6MB chunks to prevent memory spikes
+        chunk_size: 6000000, // Upload in 6MB chunks to prevent memory spikes
         overwrite: true,
       },
       (error, result) => {
         if (error || !result) return reject(error);
         resolve(result);
-      }
+      },
     );
   });
 };

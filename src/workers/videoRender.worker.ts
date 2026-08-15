@@ -9,7 +9,6 @@ import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
 import { redisConnection } from "../redis.ts";
 import connectDB from "../db/index.ts";
 import { findReciterConfig } from "../config/reciters.ts";
-import { uploadVideoToCloudinary } from "../cloudinary.ts";
 
 const clearTempDir = async (jobId: string) => {
   const dir = path.join(process.cwd(), "tmp", jobId);
@@ -74,7 +73,7 @@ const initWorker = async () => {
       });
 
       try {
-        const outputPath = await renderQuranOverlay({
+        const outputUrl = await renderQuranOverlay({
           jobId,
           videoUrl: payload.videoUrl,
           audioUrl,
@@ -89,25 +88,14 @@ const initWorker = async () => {
             });
           },
         });
-
-        const outputBuffer = await fs.promises.readFile(outputPath);
-        const uploadResult = await uploadVideoToCloudinary(
-          outputPath,
-          "quran_generated_videos",
-        );
-
-        if (!uploadResult?.secure_url) {
-          throw new Error("Cloudinary upload did not return a secure_url");
-        }
-
         await updateRenderStatus(payload.mongoRenderId, {
           status: "completed",
           progress: 100,
-          outputUrl: uploadResult.secure_url,
+          outputUrl,
         });
 
         return {
-          outputUrl: uploadResult.secure_url,
+          outputUrl,
         };
       } catch (error) {
         await updateRenderStatus(payload.mongoRenderId, {
@@ -119,7 +107,13 @@ const initWorker = async () => {
         await clearTempDir(jobId);
       }
     },
-    { connection: redisConnection },
+    {
+      connection: redisConnection,
+      concurrency: 2,
+      lockDuration: 300000,
+      stalledInterval: 30000,
+      maxStalledCount: 2,
+    },
   );
 
   worker.on("failed", async (job: Job<VideoRenderJobData> | undefined, err) => {

@@ -36,10 +36,10 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
 };
 export const triggerQuranAutoPost = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = (req as any).id;
     const user = await User.findById(userId);
 
-    if (!user || !user.isPremium) {
+    if (!user || user.isPremium===false) {
       return res
         .status(403)
         .json({ success: false, message: "Pro Premium membership required." });
