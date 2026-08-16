@@ -1,17 +1,12 @@
 import { Schema, model, Document } from "mongoose";
 
-export type PlanType = "FREE" | "PRO" | "ULTIMATE";
-export type SubscriptionStatus = "active" | "inactive" | "cancelled" | "expired";
-
-export interface MonthlyUsage {
-  videosGenerated: number;
-  lastResetDate: Date;
-}
-
-export interface SocialProfiles {
-  youtube?: string;
-  tiktok?: string;
-  facebook?: string;
+export interface AutoPostSettings {
+  enabled: boolean;
+  selectedPlatform: "youtube" | "tiktok" | "facebook";
+  defaultReciterId: string | null;
+  postFrequency: "5_PER_MONTH" | "DAILY";
+  lastAutoPostDate?: Date | null;
+  monthlyAutoPostCount: number;
 }
 
 export interface UserTypes extends Document {
@@ -21,33 +16,36 @@ export interface UserTypes extends Document {
   profileImage?: string;
   authProvider: "google" | "apple" | "email";
   currentPeriodEnd?: Date | null;
-  subscriptionStatus?: SubscriptionStatus;
-  monthlyRenderCount: number; // Added to resolve property errors
+  subscriptionStatus: "active" | "inactive" | "cancelled" | "expired";
+  monthlyRenderCount: number;
   customerPaymentId?: string;
-  plan: PlanType;
+  plan: "FREE" | "PRO" | "ULTIMATE";
   isVerified: boolean;
   premiumExpiresAt?: Date | null;
-  monthlyUsage: MonthlyUsage;
-  socialProfiles: SocialProfiles;
+  monthlyUsage: {
+    videosGenerated: number;
+    lastResetDate: Date;
+  };
+  socialProfiles?: {
+    youtube?: string;
+    tiktok?: string;
+    facebook?: string;
+  };
   socialTokens?: {
     youtube?: {
-      accessToken?: string | null;
-      refreshToken?: string | null;
+      accessToken: string | null;
+      refreshToken: string | null;
     };
     tiktok?: {
-      accessToken?: string | null;
-      refreshToken?: string | null;
+      accessToken: string | null;
+      refreshToken: string | null;
     };
     facebook?: {
-      accessToken?: string | null;
-      pageId?: string | null;
+      accessToken: string | null;
+      pageId: string | null;
     };
   };
-  autoPostSettings?: {
-    enabled: boolean;
-    postFrequency: "daily" | "weekly";
-    platforms: ("youtube" | "tiktok" | "facebook")[];
-  };
+  autoPostSettings: AutoPostSettings;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -69,7 +67,7 @@ const userSchema = new Schema<UserTypes>(
       enum: ["active", "inactive", "cancelled", "expired"],
       default: "inactive",
     },
-    monthlyRenderCount: { type: Number, default: 0 }, // Added schema field
+    monthlyRenderCount: { type: Number, default: 0 },
     customerPaymentId: { type: String },
     plan: {
       type: String,
@@ -103,15 +101,22 @@ const userSchema = new Schema<UserTypes>(
     },
     autoPostSettings: {
       enabled: { type: Boolean, default: false },
+      selectedPlatform: {
+        type: String,
+        enum: ["youtube", "tiktok", "facebook"],
+        default: "facebook",
+      },
+      defaultReciterId: { type: String, default: null },
       postFrequency: {
         type: String,
-        enum: ["daily", "weekly"],
-        default: "daily",
+        enum: ["5_PER_MONTH", "DAILY"],
+        default: "5_PER_MONTH",
       },
-      platforms: [{ type: String, enum: ["youtube", "tiktok", "facebook"] }],
+      lastAutoPostDate: { type: Date, default: null },
+      monthlyAutoPostCount: { type: Number, default: 0 },
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export const User = model<UserTypes>("User", userSchema);
