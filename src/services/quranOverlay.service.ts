@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import { PassThrough } from "stream";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -28,7 +27,7 @@ const ensureCloudinaryConfig = () => {
     api_key: apiKey,
     api_secret: apiSecret,
     secure: true,
-    timeout: 120000,
+    timeout: 300000, // 5 minutes timeout for Cloudinary operations
   });
 };
 
@@ -140,52 +139,31 @@ export const renderQuranOverlay = async ({
   const srtContent = generateInMemorySrt(arabicText, translationText, duration);
 
   const tempSrtPath = path.join(os.tmpdir(), `sub_${jobId}_${Date.now()}.srt`);
+  const tempVideoPath = path.join(
+    os.tmpdir(),
+    `render_${jobId}_${Date.now()}.mp4`,
+  );
+
   await fs.promises.writeFile(tempSrtPath, srtContent, "utf8");
 
   const escapedSrtPath = tempSrtPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 
-  return new Promise<string>((resolve, reject) => {
+  const cleanupTempFiles = () => {
+    fs.unlink(tempSrtPath, () => {});
+    fs.unlink(tempVideoPath, () => {});
+  };
+
+  // Step 1: Render video locally using FFmpeg to temp file
+  await new Promise<void>((resolve, reject) => {
     let isFinished = false;
 
-    const cleanupTempFile = () => {
-      fs.unlink(tempSrtPath, () => {});
-    };
-
-    // Watchdog timeout: Fail job if render takes longer than 5 minutes
     const watchdogTimeout = setTimeout(() => {
       if (!isFinished) {
         isFinished = true;
-        cleanupTempFile();
+        cleanupTempFiles();
         reject(new Error("Render operation timed out after 5 minutes"));
       }
     }, 300000);
-
-    const passthrough = new PassThrough();
-
-    const uploadStream = cloudinary.uploader.upload_chunked_stream(
-      {
-        resource_type: "video",
-        folder: "quran_generated_videos",
-        format: "mp4",
-        chunk_size: 6 * 1024 * 1024, // Cloudinary requires all non-final chunks to be >= 5MB
-      },
-      (error, result) => {
-        clearTimeout(watchdogTimeout);
-        cleanupTempFile();
-        if (isFinished) return;
-        isFinished = true;
-
-        if (error) return reject(error);
-        if (!result?.secure_url)
-          return reject(
-            new Error("Cloudinary upload failed: missing secure_url"),
-          );
-
-        resolve(result.secure_url);
-      },
-    );
-
-    passthrough.pipe(uploadStream);
 
     const command = ffmpeg()
       .input(videoUrl)
@@ -217,24 +195,20 @@ export const renderQuranOverlay = async ({
         "-shortest",
         "-max_muxing_queue_size",
         "1024",
-        "-f",
-        "mp4",
-        "-movflags",
-        "frag_keyframe+empty_moov+default_base_moof",
-      ]);
+      ])
+      .output(tempVideoPath);
 
     let lastProgressTime = 0;
 
     if (onProgress) {
       command.on("progress", (progress) => {
         const now = Date.now();
-        // Throttle callback updates to max once per second
         if (now - lastProgressTime > 1000) {
           lastProgressTime = now;
           let percent = 0;
 
           if (progress.percent && !isNaN(progress.percent)) {
-            percent = Math.min(Math.round(progress.percent), 99);
+            percent = Math.min(Math.round(progress.percent), 95);
           } else if (progress.timemark && duration > 0) {
             const parts = progress.timemark.split(":");
             if (parts.length === 3) {
@@ -243,10 +217,7 @@ export const renderQuranOverlay = async ({
               const seconds = parseFloat(parts[2] ?? "0") || 0;
 
               const currentSecs = hours * 3600 + minutes * 60 + seconds;
-              percent = Math.min(
-                Math.round((currentSecs / duration) * 100),
-                99,
-              );
+              percent = Math.min(Math.round((currentSecs / duration) * 95), 95);
             }
           }
 
@@ -262,22 +233,46 @@ export const renderQuranOverlay = async ({
         }
       });
     }
+
     command.on("end", () => {
-      console.log(
-        `[FFmpeg]: Render completed for job ${jobId}. Ending stream...`,
-      );
-      passthrough.end();
-    });
-
-    command.on("error", (err) => {
       clearTimeout(watchdogTimeout);
-      cleanupTempFile();
-      if (isFinished) return;
-      isFinished = true;
-      console.error("[FFmpeg Stream Error]:", err);
-      reject(err);
+      console.log(`[FFmpeg]: Local render completed for job ${jobId}.`);
+      resolve();
     });
 
-    command.pipe(passthrough, { end: false });
+    command.run();
   });
+
+  // Step 2: Upload the pre-rendered video file to Cloudinary in chunks
+  try {
+    if (onProgress) {
+      await Promise.resolve(onProgress(98));
+    }
+
+    const uploadResult = await new Promise<any>((resolve, reject) => {
+      cloudinary.uploader.upload_large(
+        tempVideoPath,
+        {
+          resource_type: "video",
+          folder: "quran_generated_videos",
+          chunk_size: 6000000, // 6MB chunks to prevent HTTP 413 Payload Too Large
+          overwrite: true,
+          use_filename: true,
+          unique_filename: false,
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve(result);
+        },
+      );
+    });
+
+    if (!uploadResult?.secure_url) {
+      throw new Error("Cloudinary upload failed: missing secure_url");
+    }
+
+    return uploadResult.secure_url;
+  } finally {
+    cleanupTempFiles();
+  }
 };

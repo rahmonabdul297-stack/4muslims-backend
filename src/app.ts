@@ -9,27 +9,19 @@ import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = 9999;
+const PORT = 8888;
 
-const startServer = async () => {
-  await connectDB();
+app.use(express.json({ limit: "100mb" }));
+connectDB();
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
+// ... other routes
+app.use("/api/v1/admin", Admin);
+app.use("/api/v1/public", Public);
+app.use("/api/v1/auth", UserAuth);
+app.use("/api/v1/profile", UserProfile);
+app.use("/api/v1/videos", VideoRoutes);
+app.use("/api/v1/payments", paymentRoutes);
 
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
-  // ... other routes
-  app.use("/api/v1/admin", Admin);
-  app.use("/api/v1/public", Public);
-  app.use("/api/v1/auth", UserAuth);
-  app.use("/api/v1/profile", UserProfile);
-  app.use("/api/v1/videos", VideoRoutes);
-  app.use("/api/v1/payments", paymentRoutes);
-
-  app.listen(PORT, () => {
-    console.log(`Server is up and running on http://localhost:${PORT}`);
-  });
-};
-
-startServer().catch((error) => {
-  console.error("Failed to start server:", error);
-  process.exit(1);
+app.listen(PORT, () => {
+  console.log(`Server is up and running on http://localhost:${PORT}`);
 });
