@@ -1,24 +1,42 @@
-import { model, Schema } from "mongoose";
-import type { paymentTypes } from "../types/payment.type.ts";
+import { Schema, model, Document } from "mongoose";
 
-const paymentSchema = new Schema<paymentTypes>(
+// 1. TypeScript Interface for Payment Document
+export interface IPayment extends Document {
+  userId: string;
+  reference: string;
+  planTier: "PRO" | "ULTIMATE";
+  durationMonths: 1 | 3 | 6 | 12;
+  amount: number;
+  currency: "NGN";
+  status: "pending" | "success" | "failed";
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// 2. Mongoose Schema
+const paymentSchema = new Schema<IPayment>(
   {
     userId: {
       type: String,
-      ref: "User", 
+      ref: "User",
       required: true,
-      index: true,
     },
     reference: {
       type: String,
       required: true,
-      unique: true, 
-      index: true,  
+      unique: true,
     },
-    plan: {
+    planTier: {
       type: String,
-      enum: ["monthly", "yearly"],
-      default: "monthly",
+      enum: ["PRO", "ULTIMATE"],
+      default: "PRO",
+      required: true,
+    },
+    durationMonths: {
+      type: Number,
+      enum: [1, 3, 6, 12],
+      default: 1,
+      required: true,
     },
     amount: {
       type: Number,
@@ -26,6 +44,7 @@ const paymentSchema = new Schema<paymentTypes>(
     },
     currency: {
       type: String,
+      enum: ["NGN", "USD"],
       default: "NGN",
       required: true,
     },
@@ -33,16 +52,9 @@ const paymentSchema = new Schema<paymentTypes>(
       type: String,
       enum: ["pending", "success", "failed"],
       default: "pending",
-      required: true,
-    },
-    paymentMethod: {
-      type: String,
-    },
-    metadata: {
-      type: Schema.Types.Mixed, 
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const Payment = model<paymentTypes>("Payment", paymentSchema);
+export const Payment = model<IPayment>("Payment", paymentSchema);

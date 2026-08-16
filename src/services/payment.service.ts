@@ -11,38 +11,43 @@ const paystackClient = axios.create({
 });
 
 export interface InitializePaystackParams {
-  email: String;
+  email: string;
   amountInNaira: number;
-  reference: String;
-  plan?: String;
-  callbackUrl?: String;
+  reference: string;
+  currency?: "NGN";
+  plan?: string;
+  callbackUrl?: string;
+  metadata?: Record<string, any>;
 }
-
 
 export const initializePaystackTransaction = async ({
   email,
   amountInNaira,
   reference,
+  currency = "NGN",
   plan,
   callbackUrl,
+  metadata = {},
 }: InitializePaystackParams) => {
   const response = await paystackClient.post("/transaction/initialize", {
     email,
-    amount: amountInNaira * 100, 
+    // Convert to minor subunits (Kobo for NGN, Cents for USD)
+    amount: Math.round(amountInNaira * 100),
     reference,
+    currency,
     callback_url: callbackUrl,
     metadata: {
       plan,
+      ...metadata,
     },
   });
 
-  return response.data.data; 
+  return response.data.data;
 };
-
 
 export const verifyPaystackTransaction = async (reference: string) => {
   const response = await paystackClient.get(
-    `/transaction/verify/${encodeURIComponent(reference)}`
+    `/transaction/verify/${encodeURIComponent(reference)}`,
   );
   return response.data.data;
 };

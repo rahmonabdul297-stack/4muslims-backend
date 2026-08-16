@@ -1,14 +1,31 @@
 import type { Request, Response } from "express";
 import crypto from "crypto";
-import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
-import { User } from "../../models/User.ts";
 import { Payment } from "../../models/payment.ts";
 import {
   initializePaystackTransaction,
   verifyPaystackTransaction,
 } from "../../services/payment.service.ts";
-const secret = process.env.PAYSTACK_SECRET_KEY;
+import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
+import { User } from "../../models/User.ts";
 
+// Define allowed plan tiers and duration intervals
+export type PlanTier = "PRO" | "ULTIMATE";
+export type PlanDuration = 1 | 3 | 6 | 12; // Months
+export type Currency = "NGN";
+
+// Base monthly prices for each plan in NGN and USD
+const BASE_MONTHLY_PRICES: Record<PlanTier, Record<Currency, number>> = {
+  PRO: {
+    NGN: 5000,
+  },
+  ULTIMATE: {
+    NGN: 12000, // Customize base monthly NGN price for Ultimate
+  },
+};
+const PLAN_LIMITS: Record<PlanTier, { monthlyRenders: number }> = {
+  PRO: { monthlyRenders: 30 },
+  ULTIMATE: { monthlyRenders: 9999 },
+};
 export const checkOut = async (req: Request, res: Response) => {
   const userId = (req as any).id;
   if (!userId) {
@@ -21,37 +38,77 @@ export const checkOut = async (req: Request, res: Response) => {
       return sendErrorResponse(res, "User doesn't exist!");
     }
 
-    if (user.isPremium === true) {
-      return sendErrorResponse(res, "This account has been upgraded!");
-    }
-    const plan: "monthly" | "yearly" =
-      req.body.plan === "yearly" ? "yearly" : "monthly";
-    const amount = plan === "yearly" ? 50000 : 5000;
+    // 1. Extract parameters from body
+    const {
+      tier = "PRO",
+      duration = 1,
+      currency = "NGN",
+    } = req.body as {
+      tier: PlanTier;
+      duration: PlanDuration;
+      currency: Currency;
+    };
 
+    // 2. Validate Tier
+    const selectedTier: PlanTier =
+      tier?.toUpperCase() === "ULTIMATE" ? "ULTIMATE" : "PRO";
+
+    // 3. Validate Duration (Must be 1, 3, 6, or 12 months)
+    const allowedDurations: PlanDuration[] = [1, 3, 6, 12];
+    const selectedDuration: PlanDuration = allowedDurations.includes(
+      Number(duration) as PlanDuration,
+    )
+      ? (Number(duration) as PlanDuration)
+      : 1;
+
+    // 4. Validate Currency
+    const selectedCurrency: Currency = "NGN";
+
+    // 5. Calculate base monthly rate & total amount
+    const baseMonthlyPrice =
+      BASE_MONTHLY_PRICES[selectedTier][selectedCurrency];
+    const totalAmount = baseMonthlyPrice * selectedDuration;
+
+    // 6. Generate payment reference
     const reference = `TRX_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+
+    // 7. Save pending payment record to DB with plan metadata
     await Payment.create({
-      userId: user?.id,
+      userId: userId,
       reference,
-      plan,
-      amount,
-      currency: "NGN",
+      planTier: selectedTier,
+      durationMonths: selectedDuration,
+      amount: totalAmount,
+      currency: selectedCurrency,
       status: "pending",
     });
 
-    // 4. Initialize transaction with Paystack
+    // 8. Initialize Paystack Transaction
+    // Convert USD to cents or NGN to Kobo as required by Paystack API (Amount * 100)
     const paystackData = await initializePaystackTransaction({
       email: user.email,
-      amountInNaira: amount,
+      amountInNaira: totalAmount,
+      currency: selectedCurrency,
       reference,
-      plan,
+      metadata: {
+        userId: user.id,
+        planTier: selectedTier,
+        durationMonths: selectedDuration,
+      },
       callbackUrl: `${process.env.FRONTEND_URL}/payment/verify?reference=${reference}`,
     });
 
-    // 5. Send back authorization URL for frontend redirect
-
+    // 9. Return authorization URL to client
     return sendSuccessResponse(res, "Checkout initialized successfully.", {
       checkoutUrl: paystackData.authorization_url,
       reference: paystackData.reference,
+      summary: {
+        tier: selectedTier,
+        durationMonths: selectedDuration,
+        monthlyRate: baseMonthlyPrice,
+        totalAmount,
+        currency: selectedCurrency,
+      },
     });
   } catch (error) {
     console.error("Checkout Error:", (error as Error).message);
@@ -63,111 +120,137 @@ export const verifyPayment = async (req: Request, res: Response) => {
   const { reference } = req.params;
 
   if (!reference) {
-    return sendErrorResponse(res, "Transaction reference is required!");
+    return sendErrorResponse(res, "Payment reference is required!");
   }
 
   try {
+    // 1. Fetch pending payment record from DB
     const payment = await Payment.findOne({ reference });
-
     if (!payment) {
-      return sendErrorResponse(res, "Transaction reference not found!");
+      return sendErrorResponse(res, "Payment transaction record not found.");
     }
+
+    // 2. Prevent duplicate processing if payment was already verified
     if (payment.status === "success") {
       return sendSuccessResponse(
         res,
-        "Payment already verified successfully.",
+        "Payment has already been verified and processed.",
         {
-          reference: payment.reference,
           status: payment.status,
+          planTier: payment.planTier,
         },
       );
     }
 
+    // 3. Verify transaction status with Paystack API
     const paystackData = await verifyPaystackTransaction(String(reference));
 
-    if (paystackData && paystackData.status === "success") {
-      payment.status = "success";
-      payment.paymentMethod = paystackData.channel;
-      await payment.save();
-      const user = await User.findById(payment.userId);
-      if (user) {
-        const now = new Date();
-        const durationInDays = payment.plan === "yearly" ? 365 : 30;
-
-        const currentExpiry =
-          user.premiumExpiresAt && new Date(user.premiumExpiresAt) > now
-            ? new Date(user.premiumExpiresAt)
-            : now;
-
-        const newExpiryDate = new Date(
-          currentExpiry.getTime() + durationInDays * 24 * 60 * 60 * 1000,
-        );
-
-        await User.findByIdAndUpdate(payment.userId, {
-          isPremium: true,
-          premiumExpiresAt: newExpiryDate,
-        });
-      }
-
-      return sendSuccessResponse(
-        res,
-        "Payment verified successfully! Account upgraded.",
-        { reference: payment.reference, status: payment.status },
-      );
-    } else {
+    if (paystackData.status !== "success") {
       payment.status = "failed";
       await payment.save();
-      return sendErrorResponse(res, "Payment failed or was declined.");
+      return sendErrorResponse(
+        res,
+        "Payment verification failed or transaction was declined.",
+      );
     }
+
+    // 4. Verify that the paid amount matches what was recorded
+    const expectedSubunits = Math.round(payment.amount * 100);
+    if (paystackData.amount !== expectedSubunits) {
+      payment.status = "failed";
+      await payment.save();
+      return sendErrorResponse(res, "Payment amount mismatch detected.");
+    }
+
+    // 5. Calculate Subscription Expiration Date
+    const user = await User.findById(payment.userId);
+    if (!user) {
+      return sendErrorResponse(res, "Associated user account not found.");
+    }
+
+    // If user already has an active future expiration date, stack the new duration onto it;
+    // otherwise, start counting from current date.
+    const now = new Date();
+    const currentExpiration =
+      user.currentPeriodEnd && new Date(user.currentPeriodEnd) > now
+        ? new Date(user.currentPeriodEnd)
+        : now;
+
+    const expirationDate = new Date(currentExpiration);
+    expirationDate.setMonth(expirationDate.getMonth() + payment.durationMonths);
+
+    // 6. Update User Subscription Tier and Reset Quota
+    user.plan = payment.planTier as PlanTier;
+    user.subscriptionStatus = "active";
+    user.currentPeriodEnd = expirationDate;
+    user.monthlyRenderCount = 0; // Reset render usage count on plan activation/renewal
+
+    await user.save();
+
+    // 7. Update Payment status to success
+    payment.status = "success";
+    await payment.save();
+
+    return sendSuccessResponse(
+      res,
+      "Payment verified successfully! Your plan is now active.",
+      {
+        planTier: user.plan,
+        durationMonths: payment.durationMonths,
+        expiresAt: expirationDate,
+        monthlyRenderLimit: PLAN_LIMITS[user.plan as PlanTier]?.monthlyRenders,
+      },
+    );
   } catch (error) {
-    console.error("Verification Error:", (error as Error).message);
+    console.error("Payment Verification Error:", (error as Error).message);
     return sendErrorResponse(res, (error as Error).message);
   }
 };
-export const paymentWebhook = async (req: Request, res: Response) => {
+
+
+export const handlePaystackWebhook = async (req: Request, res: Response) => {
   try {
-    if (!req.body || Object.keys(req.body).length === 0) {
-      return sendErrorResponse(res, "field are required!");
-    }
-
-    // 1. Use the raw unparsed buffer for hashing if available
-    const rawData = (req as any).rawBody || JSON.stringify(req.body);
-
+    // 1. Verify Paystack Signature
     const hash = crypto
-      .createHmac("sha512", String(secret))
-      .update(rawData)
+      .createHmac("sha256", process.env.PAYSTACK_SECRET_KEY || "")
+      .update(JSON.stringify(req.body))
       .digest("hex");
 
-    // 2. Validate signature
-    if (hash !== req.headers["x-paystack-signature"]) {
-      return sendErrorResponse(res, "Invalid Webhook Signature");
+    const paystackSignature = req.headers["x-paystack-signature"];
+
+    // In production, strictly enforce signature check
+    if (hash !== paystackSignature) {
+      return res.status(400).json({ message: "Invalid signature" });
     }
 
     const { event, data } = req.body;
 
+    // 2. Handle successful payment event
     if (event === "charge.success") {
-      const { reference, channel } = data;
+      const { userId, tier, durationMonths } = data.metadata || {};
 
-      const payment = await Payment.findOne({ reference });
+      if (userId) {
+        const monthsToAdd = Number(durationMonths) || 1;
+        const currentPeriodEnd = new Date();
+        currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + monthsToAdd);
 
-      if (payment && payment.status !== "success") {
-        payment.status = "success";
-        payment.paymentMethod = channel;
-        await payment.save();
-
-        await User.findByIdAndUpdate(payment.userId, {
-          isPremium: true,
+        // Update user's plan and reset usage
+        await User.findByIdAndUpdate(userId, {
+          plan: tier || "PRO",
+          subscriptionStatus: "active",
+          currentPeriodEnd,
+          monthlyRenderCount: 0,
+          customerPaymentId: data.customer?.customer_code || null,
         });
 
-        console.log(
-          `Webhook processed successfully for User ID: ${payment.userId}`,
-        );
+        console.log(`User ${userId} upgraded to ${tier} for ${monthsToAdd} month(s).`);
       }
     }
 
-    return res.status(200).send("Webhook received");
-  } catch (error) {
-    console.error("Webhook processing error:", (error as Error).message);
-    return sendErrorResponse(res, "webhook internal err-");
+    // Always respond with 200 OK to acknowledge receipt to Paystack
+    return res.status(200).send("Webhook received successfully.");
+  } catch (error: any) {
+    console.error("Webhook error:", error.message);
+    return res.status(500).send("Webhook processing error.");
   }
 };
