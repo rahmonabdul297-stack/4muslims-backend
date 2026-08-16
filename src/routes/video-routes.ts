@@ -5,18 +5,19 @@ import {
   generatedVideoHistory,
   getVideoStatus,
 } from "../controllers/video.controller.ts";
-import { checkAndDeductUsage } from "../controllers/user/generate-video.ts";
 import {
   triggerQuranAutoPost,
   updateAutoPostSettings,
 } from "../controllers/autoposter.controller.ts";
+import { enforcePlanLimits } from "../middlewares/planguard.ts";
 
 const router = Router();
 
+// Manual video generation route
 router.post(
   "/custom",
   verifyUserLoginToken,
-  checkAndDeductUsage,
+  enforcePlanLimits(false),
   generateCustomVideo,
 );
 router.get("/status/:jobId", getVideoStatus);

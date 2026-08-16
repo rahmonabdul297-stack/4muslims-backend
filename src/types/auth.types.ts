@@ -1,34 +1,50 @@
-export interface ISocialTokens {
-  youtube?: {
-    accessToken?: string | null;
-    refreshToken?: string | null;
-  };
-  instagram?: {
-    accessToken?: string | null;
-    instagramAccountId?: string | null;
-  };
+export type PlanType = "FREE" | "PRO" | "ULTIMATE";
+
+export interface SocialProfiles {
+  youtube?: string | null;
+  tiktok?: string | null;
+  facebook?: string | null;
 }
 
-export interface IAutoPostSettings {
-  enabled: boolean;
-  postFrequency: "daily" | "weekly";
-  platforms: ("youtube" | "instagram")[];
+export interface MonthlyUsage {
+  manualGenerationsCount: number;
+  autoGenerationsCount: number;
+  lastResetDate: Date;
 }
+
 export interface UserTypes {
-  name: String;
-  email: String;
-  password?: String;
-  profileImage?: String;
-  isPremium: Boolean;
-  premiumExpiresAt: Date;
-  freeUsageCount: number;
-  lastUsageReset: Date;
+  _id?: string;
+  name: string;
+  email: string;
+  password?: string;
+  profileImage?: string;
   authProvider: "google" | "apple" | "email";
-  isVerified: Boolean;
-  customerPaymentId?: String;
-  socialTokens?: ISocialTokens;
-  autoPostSettings?: IAutoPostSettings;
-  createdAt: Date;
+  customerPaymentId?: string;
+  plan: PlanType;
+  isVerified: boolean;
+  premiumExpiresAt?: Date | null;
+  monthlyUsage: MonthlyUsage;
+  socialProfiles: SocialProfiles;
+  socialTokens?: {
+    youtube?: {
+      accessToken?: string | null;
+      refreshToken?: string | null;
+    };
+    tiktok?: {
+      accessToken?: string | null;
+      refreshToken?: string | null;
+    };
+    facebook?: {
+      accessToken?: string | null;
+      pageId?: string | null;
+    };
+  };
+  autoPostSettings?: {
+    enabled: boolean;
+    postFrequency: "daily" | "weekly";
+    platforms: ("youtube" | "tiktok" | "facebook")[];
+  };
+  createdAt?: Date;
 }
 
 export interface TokenPayloadTypes {

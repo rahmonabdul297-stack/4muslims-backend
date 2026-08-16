@@ -30,14 +30,32 @@ const updateUserProfile = async (req: Request, res: Response) => {
       return sendErrorResponse(res, "User doesn't exist!", 404);
     }
 
-    // 1. Handle Text Fields (from req.body)
-    const { name, email, password } = req.body;
+    // 1. Handle Text Fields & Social Profiles (from req.body)
+    const { name, email, password, socialProfiles, youtube, tiktok, facebook } = req.body;
+
     if (name) user.name = name;
     if (email) user.email = email.toLowerCase();
     if (password) {
       const salt = bcrypt.genSaltSync(10);
       user.password = bcrypt.hashSync(password, salt);
     }
+
+    // Initialize socialProfiles object if it doesn't exist on user document yet
+    if (!user.socialProfiles) {
+      user.socialProfiles = { youtube: null, tiktok: null, facebook: null };
+    }
+
+    // Accept nested object format: req.body.socialProfiles = { youtube: '...', ... }
+    if (socialProfiles) {
+      if (socialProfiles.youtube !== undefined) user.socialProfiles.youtube = socialProfiles.youtube;
+      if (socialProfiles.tiktok !== undefined) user.socialProfiles.tiktok = socialProfiles.tiktok;
+      if (socialProfiles.facebook !== undefined) user.socialProfiles.facebook = socialProfiles.facebook;
+    }
+
+    // Also accept top-level fields: req.body.youtube, req.body.tiktok, req.body.facebook
+    if (youtube !== undefined) user.socialProfiles.youtube = youtube;
+    if (tiktok !== undefined) user.socialProfiles.tiktok = tiktok;
+    if (facebook !== undefined) user.socialProfiles.facebook = facebook;
 
     // 2. Handle File Upload (from req.file)
     const newProfilePic = req.file;
@@ -76,7 +94,7 @@ const updateUserProfile = async (req: Request, res: Response) => {
       user.profileImage = cloudinaryResponse.secure_url;
     }
 
-    // 3. Save all changes (text + image) in a single DB write
+    // 3. Save all changes (text + social links + image) in a single DB write
     await user.save();
 
     // Hide sensitive data before sending back
@@ -84,7 +102,7 @@ const updateUserProfile = async (req: Request, res: Response) => {
 
     return sendSuccessResponse(res, "Profile updated successfully!", user);
   } catch (error) {
-    return sendErrorResponse(res, "name, email or password are required!");
+    return sendErrorResponse(res, (error as Error).message || "Error updating profile!");
   }
 };
 export { getUserProfile, updateUserProfile };

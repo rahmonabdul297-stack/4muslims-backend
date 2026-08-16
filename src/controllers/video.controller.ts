@@ -73,6 +73,11 @@ const validateUrlAccessible = async (url: string) => {
 
 const generateCustomVideo = async (req: Request, res: Response) => {
   const userId = (req as any).id;
+  
+  // Attached by enforcePlanLimits middleware
+  const user = (req as any).userInstance;
+  const planConfig = (req as any).planConfig;
+
   const {
     templateId,
     surahNumber,
@@ -167,6 +172,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
 
     let job;
     try {
+      // Queue rendering job with plan settings passed through
       job = await videoRenderQueue.add("render-video", {
         mongoRenderId: generated._id.toString(),
         userId,
@@ -180,7 +186,17 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         globalAyahNumber,
         surahName,
         reciterId,
+        // Pass plan enforcement properties to the BullMQ worker / FFmpeg process
+        planConfig: {
+          hasWatermark: planConfig.hasWatermark,
+          preset: planConfig.preset,
+          crf: planConfig.crf,
+          resolutionScale: planConfig.resolutionScale,
+          audioBitrate: planConfig.audioBitrate,
+          maxDurationSeconds: planConfig.maxDurationSeconds,
+        },
       });
+
       console.log("[generateCustomVideo] queued audioUrl=", audioUrl, {
         rawReciterId: reciterId,
         normalizedReciterId: reciterId,
@@ -202,8 +218,12 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       return sendErrorResponse(res, "Failed to dispatch rendering job.", 500);
     }
 
+    // Save job ID and increment the user's manual generations count
     generated.jobId = job.id;
     await generated.save();
+
+    user.monthlyUsage.manualGenerationsCount += 1;
+    await user.save();
 
     return res.status(202).json({
       success: true,
@@ -212,6 +232,10 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         jobId: job.id,
         renderId: generated._id,
         status: "pending",
+        usage: {
+          used: user.monthlyUsage.manualGenerationsCount,
+          limit: planConfig.manualLimit, // -1 means unlimited
+        },
       },
     });
   } catch (error) {

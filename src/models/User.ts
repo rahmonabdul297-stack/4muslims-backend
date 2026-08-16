@@ -9,6 +9,7 @@ const UserSchema = new Schema<UserTypes>({
   email: {
     type: String,
     required: true,
+    unique: true,
   },
   password: {
     type: String,
@@ -25,9 +26,11 @@ const UserSchema = new Schema<UserTypes>({
   customerPaymentId: {
     type: String,
   },
-  isPremium: {
-    type: Boolean,
-    default: false,
+  plan: {
+    type: String,
+    enum: ["FREE", "PRO", "ULTIMATE"],
+    default: "FREE",
+    required: true,
   },
   isVerified: {
     type: Boolean,
@@ -37,25 +40,39 @@ const UserSchema = new Schema<UserTypes>({
     type: Date,
     default: null,
   },
-  freeUsageCount: {
-    type: Number,
-    default: 0,
+  monthlyUsage: {
+    manualGenerationsCount: {
+      type: Number,
+      default: 0,
+    },
+    autoGenerationsCount: {
+      type: Number,
+      default: 0,
+    },
+    lastResetDate: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  lastUsageReset: {
-    type: Date,
-    default: Date.now,
+  socialProfiles: {
+    youtube: { type: String, default: null },
+    tiktok: { type: String, default: null },
+    facebook: { type: String, default: null },
   },
   socialTokens: {
     youtube: {
       accessToken: { type: String, default: null },
       refreshToken: { type: String, default: null },
     },
-    instagram: {
+    tiktok: {
       accessToken: { type: String, default: null },
-      instagramAccountId: { type: String, default: null },
+      refreshToken: { type: String, default: null },
+    },
+    facebook: {
+      accessToken: { type: String, default: null },
+      pageId: { type: String, default: null },
     },
   },
-
   autoPostSettings: {
     enabled: { type: Boolean, default: false },
     postFrequency: {
@@ -63,7 +80,7 @@ const UserSchema = new Schema<UserTypes>({
       enum: ["daily", "weekly"],
       default: "daily",
     },
-    platforms: [{ type: String, enum: ["youtube", "instagram"] }],
+    platforms: [{ type: String, enum: ["youtube", "tiktok", "facebook"] }],
   },
   createdAt: {
     type: Date,

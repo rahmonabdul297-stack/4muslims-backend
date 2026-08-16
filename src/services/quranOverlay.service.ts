@@ -89,7 +89,9 @@ const generateInMemorySrt = (
 
     srtContent += `${i + 1}\n`;
     srtContent += `${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n`;
-    srtContent += `${shapedArabic}\n${translation}\n\n`;
+    // Arabic: Large (26px) & Bold (\b1)
+    // Translation: Half-size (13px), Normal weight (\b0), Soft white color (\c&HE0E0E0&)
+    srtContent += `{\\fs26\\b1}${shapedArabic}\n{\\fs13\\b0\\c&HE0E0E0&}${translation}{\\r}\n\n`;
   }
 
   return srtContent;
@@ -138,113 +140,148 @@ export const renderQuranOverlay = async ({
   const duration = await getAudioDuration(audioUrl);
   const srtContent = generateInMemorySrt(arabicText, translationText, duration);
 
-  const tempSrtPath = path.join(os.tmpdir(), `sub_${jobId}_${Date.now()}.srt`);
-  const tempVideoPath = path.join(
-    os.tmpdir(),
-    `render_${jobId}_${Date.now()}.mp4`,
-  );
+  const workDir = path.join(process.cwd(), "tmp", jobId);
+  await fs.promises.mkdir(workDir, { recursive: true });
+
+  const tempSrtPath = path.join(workDir, `sub_${Date.now()}.srt`);
+  const tempVideoPath = path.join(workDir, `render_${Date.now()}.mp4`);
 
   await fs.promises.writeFile(tempSrtPath, srtContent, "utf8");
 
   const escapedSrtPath = tempSrtPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 
-  const cleanupTempFiles = () => {
-    fs.unlink(tempSrtPath, () => {});
-    fs.unlink(tempVideoPath, () => {});
+  const cleanupTempFiles = async () => {
+    try {
+      await fs.promises.rm(workDir, { recursive: true, force: true });
+    } catch {
+      // Ignore directory cleanup errors
+    }
   };
 
-  // Step 1: Render video locally using FFmpeg to temp file
-  await new Promise<void>((resolve, reject) => {
-    let isFinished = false;
+  try {
+    // Step 1: Render video locally using FFmpeg with hard file size limits
+    await new Promise<void>((resolve, reject) => {
+      let isFinished = false;
 
-    const watchdogTimeout = setTimeout(() => {
-      if (!isFinished) {
-        isFinished = true;
-        cleanupTempFiles();
-        reject(new Error("Render operation timed out after 5 minutes"));
-      }
-    }, 300000);
+      const command = ffmpeg()
+        .input(videoUrl)
+        .inputOptions(["-stream_loop", "-1"])
+        .input(audioUrl)
+        .complexFilter([
+          `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
+          // WrapStyle=2 allows clean responsive text wrapping across video widths
+          // MarginL=50 & MarginR=50 prevent text from hitting side edges or clumping awkwardly
+          `[bg]subtitles='${escapedSrtPath}':force_style='Fontsize=26,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=50,MarginL=50,MarginR=50,WrapStyle=2'[outv]`,
+        ])
+        .outputOptions([
+          "-map",
+          "[outv]",
+          "-map",
+          "1:a",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-threads",
+          "2",
+          "-crf",
+          "30", // Keeps file size significantly smaller
+          "-maxrate",
+          "3500k", // Caps peak video bitrate to 3.5 Mbps
+          "-bufsize",
+          "7000k",
+          "-fs",
+          "90M", // Forces FFmpeg to abort if output hits 90 MB
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-pix_fmt",
+          "yuv420p",
+          "-shortest",
+          "-max_muxing_queue_size",
+          "1024",
+        ])
+        .output(tempVideoPath);
 
-    const command = ffmpeg()
-      .input(videoUrl)
-      .inputOptions(["-stream_loop", "-1"])
-      .input(audioUrl)
-      .complexFilter([
-        `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
-        `[bg]subtitles='${escapedSrtPath}':force_style='Fontsize=28,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=60'[outv]`,
-      ])
-      .outputOptions([
-        "-map",
-        "[outv]",
-        "-map",
-        "1:a",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "ultrafast",
-        "-threads",
-        "2",
-        "-crf",
-        "28",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "128k",
-        "-pix_fmt",
-        "yuv420p",
-        "-shortest",
-        "-max_muxing_queue_size",
-        "1024",
-      ])
-      .output(tempVideoPath);
-
-    let lastProgressTime = 0;
-
-    if (onProgress) {
-      command.on("progress", (progress) => {
-        const now = Date.now();
-        if (now - lastProgressTime > 1000) {
-          lastProgressTime = now;
-          let percent = 0;
-
-          if (progress.percent && !isNaN(progress.percent)) {
-            percent = Math.min(Math.round(progress.percent), 95);
-          } else if (progress.timemark && duration > 0) {
-            const parts = progress.timemark.split(":");
-            if (parts.length === 3) {
-              const hours = parseFloat(parts[0] ?? "0") || 0;
-              const minutes = parseFloat(parts[1] ?? "0") || 0;
-              const seconds = parseFloat(parts[2] ?? "0") || 0;
-
-              const currentSecs = hours * 3600 + minutes * 60 + seconds;
-              percent = Math.min(Math.round((currentSecs / duration) * 95), 95);
-            }
-          }
-
-          if (percent > 0) {
-            try {
-              Promise.resolve(onProgress(percent)).catch((err) =>
-                console.error("Progress callback non-fatal error:", err),
-              );
-            } catch (err) {
-              console.error("Sync progress callback error:", err);
-            }
-          }
+      const watchdogTimeout = setTimeout(() => {
+        if (!isFinished) {
+          isFinished = true;
+          command.kill("SIGKILL");
+          reject(new Error("Render operation timed out after 5 minutes"));
         }
-      });
-    }
+      }, 300000);
 
-    command.on("end", () => {
-      clearTimeout(watchdogTimeout);
-      console.log(`[FFmpeg]: Local render completed for job ${jobId}.`);
-      resolve();
+      let lastProgressTime = 0;
+
+      if (onProgress) {
+        command.on("progress", (progress) => {
+          const now = Date.now();
+          if (now - lastProgressTime > 1000) {
+            lastProgressTime = now;
+            let percent = 0;
+
+            if (progress.percent && !isNaN(progress.percent)) {
+              percent = Math.min(Math.round(progress.percent), 95);
+            } else if (progress.timemark && duration > 0) {
+              const parts = progress.timemark.split(":");
+              if (parts.length === 3) {
+                const hours = parseFloat(parts[0] ?? "0") || 0;
+                const minutes = parseFloat(parts[1] ?? "0") || 0;
+                const seconds = parseFloat(parts[2] ?? "0") || 0;
+
+                const currentSecs = hours * 3600 + minutes * 60 + seconds;
+                percent = Math.min(
+                  Math.round((currentSecs / duration) * 95),
+                  95,
+                );
+              }
+            }
+
+            if (percent > 0) {
+              try {
+                Promise.resolve(onProgress(percent)).catch((err) =>
+                  console.error("Progress callback non-fatal error:", err),
+                );
+              } catch (err) {
+                console.error("Sync progress callback error:", err);
+              }
+            }
+          }
+        });
+      }
+
+      command.on("error", (err) => {
+        if (isFinished) return;
+        isFinished = true;
+        clearTimeout(watchdogTimeout);
+        reject(new Error(`FFmpeg rendering failed: ${err.message}`));
+      });
+
+      command.on("end", () => {
+        if (isFinished) return;
+        isFinished = true;
+        clearTimeout(watchdogTimeout);
+        console.log(`[FFmpeg]: Local render completed for job ${jobId}.`);
+        resolve();
+      });
+
+      command.run();
     });
 
-    command.run();
-  });
+    // Step 2: Validate file size before uploading to Cloudinary
+    const fileStats = await fs.promises.stat(tempVideoPath);
+    const maxSizeBytes = 95 * 1024 * 1024; // 95 MB threshold
 
-  // Step 2: Upload the pre-rendered video file to Cloudinary in chunks
-  try {
+    if (fileStats.size > maxSizeBytes) {
+      throw new Error(
+        `Rendered video size (${(fileStats.size / (1024 * 1024)).toFixed(
+          2,
+        )} MB) exceeds Cloudinary's maximum allowed limit of 95 MB.`,
+      );
+    }
+
+    // Step 3: Upload rendered file to Cloudinary in chunks
     if (onProgress) {
       await Promise.resolve(onProgress(98));
     }
@@ -255,7 +292,7 @@ export const renderQuranOverlay = async ({
         {
           resource_type: "video",
           folder: "quran_generated_videos",
-          chunk_size: 6000000, // 6MB chunks to prevent HTTP 413 Payload Too Large
+          chunk_size: 6000000, // 6MB chunks to prevent HTTP 413
           overwrite: true,
           use_filename: true,
           unique_filename: false,
@@ -273,6 +310,6 @@ export const renderQuranOverlay = async ({
 
     return uploadResult.secure_url;
   } finally {
-    cleanupTempFiles();
+    await cleanupTempFiles();
   }
 };

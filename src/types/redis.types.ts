@@ -1,5 +1,5 @@
 export interface VideoRenderJobData {
-  mongoRenderId: string; // Ref to MongoDB document _id
+  mongoRenderId: string;
   userId: string;
   templateId: string;
   videoUrl: string;
@@ -8,7 +8,17 @@ export interface VideoRenderJobData {
   translationText: string;
   surahNumber: number;
   ayahNumber: number;
-  globalAyahNumber?: number;
+  globalAyahNumber: number;
   surahName?: string;
   reciterId: string;
+
+  // Add the planConfig property to the interface
+  planConfig: {
+    hasWatermark: boolean;
+    preset: "ultrafast" | "faster" | "medium";
+    crf: string;
+    resolutionScale?: string;
+    audioBitrate: string;
+    maxDurationSeconds: number;
+  };
 }
