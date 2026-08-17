@@ -39,6 +39,12 @@ import {
   refreshSession,
   verifyUserLoginToken,
 } from "../../utils/helper.ts";
+import {
+  facebookCallback,
+  getFacebookAuthUrl,
+  getYouTubeAuthUrl,
+  youtubeCallback,
+} from "../../controllers/auth/socialauth.controller.ts";
 
 const router = Router();
 
@@ -96,4 +102,10 @@ router.put(
   sendUpdatedPasswordMail,
 );
 
+router.get("/youtube/connect", verifyUserLoginToken, getYouTubeAuthUrl);
+router.get("/facebook/connect", verifyUserLoginToken, getFacebookAuthUrl);
+
+// OAuth Callback Routes (Redirected from Provider)
+router.get("/youtube/callback", youtubeCallback);
+router.get("/facebook/callback", facebookCallback);
 export default router;
