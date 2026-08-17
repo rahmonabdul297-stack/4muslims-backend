@@ -31,7 +31,8 @@ const updateUserProfile = async (req: Request, res: Response) => {
     }
 
     // 1. Handle Text Fields & Social Profiles (from req.body)
-    const { name, email, password, socialProfiles, youtube, tiktok, facebook } = req.body;
+    const { name, email, password, socialProfiles, youtube, tiktok, facebook } =
+      req.body;
 
     if (name) user.name = name;
     if (email) user.email = email.toLowerCase();
@@ -42,14 +43,17 @@ const updateUserProfile = async (req: Request, res: Response) => {
 
     // Initialize socialProfiles object if it doesn't exist on user document yet
     if (!user.socialProfiles) {
-      user.socialProfiles = { youtube: null, tiktok: null, facebook: null };
+      user.socialProfiles = { youtube: "", tiktok: "", facebook: "" };
     }
 
     // Accept nested object format: req.body.socialProfiles = { youtube: '...', ... }
     if (socialProfiles) {
-      if (socialProfiles.youtube !== undefined) user.socialProfiles.youtube = socialProfiles.youtube;
-      if (socialProfiles.tiktok !== undefined) user.socialProfiles.tiktok = socialProfiles.tiktok;
-      if (socialProfiles.facebook !== undefined) user.socialProfiles.facebook = socialProfiles.facebook;
+      if (socialProfiles.youtube !== undefined)
+        user.socialProfiles.youtube = socialProfiles.youtube;
+      if (socialProfiles.tiktok !== undefined)
+        user.socialProfiles.tiktok = socialProfiles.tiktok;
+      if (socialProfiles.facebook !== undefined)
+        user.socialProfiles.facebook = socialProfiles.facebook;
     }
 
     // Also accept top-level fields: req.body.youtube, req.body.tiktok, req.body.facebook
@@ -102,7 +106,10 @@ const updateUserProfile = async (req: Request, res: Response) => {
 
     return sendSuccessResponse(res, "Profile updated successfully!", user);
   } catch (error) {
-    return sendErrorResponse(res, (error as Error).message || "Error updating profile!");
+    return sendErrorResponse(
+      res,
+      (error as Error).message || "Error updating profile!",
+    );
   }
 };
 export { getUserProfile, updateUserProfile };

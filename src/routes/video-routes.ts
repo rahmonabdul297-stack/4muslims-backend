@@ -24,15 +24,15 @@ router.get("/status/:jobId", getVideoStatus);
 router.get("/history", verifyUserLoginToken, generatedVideoHistory);
 
 router.put(
-  "/settings",
+  "/autopostsettings",
   verifyUserLoginToken,
   requirePremium,
   updateAutoPostSettings,
 );
 
-// Trigger manual automated post
+// Trigger automated post
 router.post(
-  "/trigger",
+  "/triggerautopost",
   verifyUserLoginToken,
   requirePremium,
   triggerQuranAutoPost,

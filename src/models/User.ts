@@ -33,16 +33,16 @@ export interface UserTypes extends Document {
   };
   socialTokens?: {
     youtube?: {
-      accessToken: string | null;
-      refreshToken: string | null;
+      accessToken: string;
+      refreshToken: string;
     };
     tiktok?: {
-      accessToken: string | null;
-      refreshToken: string | null;
+      accessToken: string;
+      refreshToken: string;
     };
     facebook?: {
-      accessToken: string | null;
-      pageId: string | null;
+      accessToken: string;
+      pageId: string;
     };
   };
   autoPostSettings: AutoPostSettings;
@@ -81,9 +81,9 @@ const userSchema = new Schema<UserTypes>(
       lastResetDate: { type: Date, default: Date.now },
     },
     socialProfiles: {
-      youtube: { type: String },
-      tiktok: { type: String },
-      facebook: { type: String },
+      youtube: { type: String, default: "" },
+      tiktok: { type: String, default: "" },
+      facebook: { type: String, default: "" },
     },
     socialTokens: {
       youtube: {
@@ -104,12 +104,14 @@ const userSchema = new Schema<UserTypes>(
       selectedPlatform: {
         type: String,
         enum: ["youtube", "tiktok", "facebook"],
+        lowercase: true,
         default: "facebook",
       },
       defaultReciterId: { type: String, default: null },
       postFrequency: {
         type: String,
-        enum: ["5_PER_MONTH", "DAILY"],
+        enum: ["5_PER_MONTH", "DAILY", "5_per_month", "daily"],
+        uppercase: true,
         default: "5_PER_MONTH",
       },
       lastAutoPostDate: { type: Date, default: null },

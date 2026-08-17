@@ -6,19 +6,27 @@ export const publishToYouTube = async (
   title: string,
   description: string,
 ): Promise<string> => {
-  const response = await axios.post(
-    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=media&part=snippet,status",
-    {
-      snippet: {
-        title,
-        description,
-        tags: ["Quran", "Islam", "Motivation", "Reminders"],
-        categoryId: "22",
-      },
-      status: {
-        privacyStatus: "public",
-      },
+  // Step A: Fetch video binary as arraybuffer / stream
+  const videoStream = await axios.get(videoUrl, {
+    responseType: "arraybuffer",
+  });
+
+  const metadata = {
+    snippet: {
+      title,
+      description,
+      tags: ["Quran", "Islam", "Motivation", "Reminders"],
+      categoryId: "22", // People & Blogs
     },
+    status: {
+      privacyStatus: "public",
+    },
+  };
+
+  // Step B: Initialize Resumable Upload Session
+  const initResponse = await axios.post(
+    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+    metadata,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -27,33 +35,63 @@ export const publishToYouTube = async (
     },
   );
 
-  return response.data.id;
+  const uploadUrl = initResponse.headers.location;
+
+  const uploadResponse = await axios.put(uploadUrl, videoStream.data, {
+    headers: {
+      "Content-Type": "video/mp4",
+    },
+  });
+
+  return uploadResponse.data.id;
 };
 
-export const publishToInstagramReels = async (
-  accessToken: string,
-  instagramAccountId: string,
+export const publishToFacebookVideo = async (
+  pageAccessToken: string,
+  pageId: string,
   videoUrl: string,
-  caption: string,
+  description: string,
 ): Promise<string> => {
-  const containerResponse = await axios.post(
-    `https://graph.facebook.com/v18.0/${instagramAccountId}/media`,
+  // Facebook Graph API accepts external video URLs directly via file_url parameter
+  const response = await axios.post(
+    `https://graph.facebook.com/v19.0/${pageId}/videos`,
     {
-      media_type: "REELS",
-      video_url: videoUrl,
-      caption,
-      access_token: accessToken,
+      file_url: videoUrl,
+      description,
+      access_token: pageAccessToken,
     },
   );
 
-  const containerId = containerResponse.data.id;
-  const publishResponse = await axios.post(
-    `https://graph.facebook.com/v18.0/${instagramAccountId}/media_publish`,
+  return response.data.id;
+};
+export const publishToTikTokDirectPost = async (
+  accessToken: string,
+  videoUrl: string,
+  title: string,
+): Promise<string> => {
+  // Step A: Initialize post request on TikTok Direct Post API
+  const initResponse = await axios.post(
+    "https://open.tiktokapis.com/v2/post/publish/video/init/",
     {
-      creation_id: containerId,
-      access_token: accessToken,
+      post_info: {
+        title,
+        privacy_level: "PUBLIC_TO_EVERYONE",
+        disable_duet: false,
+        disable_stitch: false,
+        disable_comment: false,
+      },
+      source_info: {
+        source: "PULL_FROM_URL",
+        video_url: videoUrl,
+      },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
     },
   );
 
-  return publishResponse.data.id;
+  return initResponse.data.data.publish_id;
 };
