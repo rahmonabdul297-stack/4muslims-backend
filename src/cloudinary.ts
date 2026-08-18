@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 import cloud, { type UploadApiResponse } from "cloudinary";
+import fs from "fs";
 import type {
   CloudinaryUploadResponse,
   CloudinaryUploadResult,
@@ -100,35 +101,54 @@ const uploadMultipleImagesToCloudinary = async (
 
 export const uploadMultipleVideosToCloudinary = async (
   files: Express.Multer.File[],
-  folder: string,
+  folder: string
 ): Promise<CloudinaryVideoUploadResult[]> => {
-  const uploadPromises = files.map((file) => {
-    return new Promise<CloudinaryVideoUploadResult>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder,
-          resource_type: "video",
-          eager_async: true,
-          chunk_size: 20000000,
-        },
-        (error, result?: UploadApiResponse) => {
-          if (error || !result) {
-            return reject(error || new Error("Cloudinary video upload failed"));
-          }
-          resolve({
-            url: result.secure_url,
-            public_id: result.public_id,
-            duration: result.duration, // Cloudinary provides video duration automatically
-            format: result.format,
-          });
-        },
+  const results: CloudinaryVideoUploadResult[] = [];
+
+  for (const file of files) {
+    // Fallback/Validation check to prevent "path argument must be string" error
+    const filePath = file.path;
+
+    if (!filePath) {
+      throw new Error(
+        "File path is undefined. Make sure Multer is configured with diskStorage instead of memoryStorage."
       );
+    }
 
-      uploadStream.end(file.buffer);
-    });
-  });
+    try {
+      const uploadResult = await new Promise<UploadApiResponse>((resolve, reject) => {
+        cloudinary.uploader.upload_large(
+          filePath,
+          {
+            folder,
+            resource_type: "video",
+            chunk_size: 6 * 1024 * 1024, // 6 MB chunks
+            eager_async: true,
+          },
+          (error, result) => {
+            if (error || !result) {
+              return reject(error || new Error("Cloudinary video upload failed"));
+            }
+            resolve(result);
+          }
+        );
+      });
 
-  return Promise.all(uploadPromises);
+      results.push({
+        url: uploadResult.secure_url,
+        public_id: uploadResult.public_id,
+        duration: uploadResult.duration,
+        format: uploadResult.format,
+      });
+    } finally {
+      // Safely delete temporary file after upload
+      if (filePath && fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  }
+
+  return results;
 };
 
 const deleteImageFromCloudinary = async (public_id: string): Promise<any> => {

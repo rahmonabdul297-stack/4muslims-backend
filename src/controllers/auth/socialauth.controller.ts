@@ -80,7 +80,10 @@ export const getFacebookAuthUrl = (req: Request, res: Response) => {
 export const facebookCallback = async (req: Request, res: Response) => {
   try {
     // 1. Extract query parameters sent after the '?' in the URL
-    const { code, state: userId } = req.query as { code?: string; state?: string };
+    const { code, state: userId } = req.query as {
+      code?: string;
+      state?: string;
+    };
 
     if (!code || !userId) {
       return res.status(400).json({
@@ -100,12 +103,14 @@ export const facebookCallback = async (req: Request, res: Response) => {
           redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
           code,
         },
-      }
+      },
     );
 
     const shortLivedToken = tokenRes.data?.access_token;
     if (!shortLivedToken) {
-      throw new Error("Failed to obtain short-lived access token from Facebook.");
+      throw new Error(
+        "Failed to obtain short-lived access token from Facebook.",
+      );
     }
 
     // 3. Exchange short-lived token for long-lived user token (~60 days)
@@ -118,7 +123,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
           client_secret: process.env.FACEBOOK_APP_SECRET,
           fb_exchange_token: shortLivedToken,
         },
-      }
+      },
     );
 
     const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
@@ -128,13 +133,13 @@ export const facebookCallback = async (req: Request, res: Response) => {
       "https://graph.facebook.com/v19.0/me/accounts",
       {
         params: { access_token: longLivedToken },
-      }
+      },
     );
 
     const page = pagesRes.data?.data?.[0];
     if (!page) {
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard?error=no_facebook_pages_found`
+        `${process.env.FRONTEND_URL}/dashboard?error=no_facebook_pages_found`,
       );
     }
 
@@ -151,11 +156,11 @@ export const facebookCallback = async (req: Request, res: Response) => {
           "socialProfiles.facebook": `https://facebook.com/${page.id}`,
         },
       },
-      { new: true }
+      { new: true },
     );
 
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`
+      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`,
     );
   } catch (error: any) {
     const errorMessage =
@@ -163,7 +168,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
     console.error("Facebook OAuth Error:", error?.response?.data || error);
 
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`,
     );
   }
 };
