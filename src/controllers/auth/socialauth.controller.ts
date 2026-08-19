@@ -78,8 +78,11 @@ export const getFacebookAuthUrl = (req: Request, res: Response) => {
 };
 
 export const facebookCallback = async (req: Request, res: Response) => {
+  // Flag to check if request came from Postman or direct JSON client
+  const isJsonClient = req.headers["accept"]?.includes("application/json") || req.headers["user-agent"]?.includes("Postman");
+
   try {
-    // 1. Extract query parameters sent after the '?' in the URL
+    // 1. Extract query parameters
     const { code, state: userId } = req.query as {
       code?: string;
       state?: string;
@@ -88,7 +91,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
     if (!code || !userId) {
       return res.status(400).json({
         success: false,
-        message: "Missing code or state in query parameters",
+        message: "Missing code or state (userId) in query parameters.",
         receivedQuery: req.query,
       });
     }
@@ -103,14 +106,12 @@ export const facebookCallback = async (req: Request, res: Response) => {
           redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
           code,
         },
-      },
+      }
     );
 
     const shortLivedToken = tokenRes.data?.access_token;
     if (!shortLivedToken) {
-      throw new Error(
-        "Failed to obtain short-lived access token from Facebook.",
-      );
+      throw new Error("Failed to obtain short-lived access token from Facebook.");
     }
 
     // 3. Exchange short-lived token for long-lived user token (~60 days)
@@ -123,7 +124,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
           client_secret: process.env.FACEBOOK_APP_SECRET,
           fb_exchange_token: shortLivedToken,
         },
-      },
+      }
     );
 
     const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
@@ -133,21 +134,25 @@ export const facebookCallback = async (req: Request, res: Response) => {
       "https://graph.facebook.com/v19.0/me/accounts",
       {
         params: { access_token: longLivedToken },
-      },
+      }
     );
 
     const page = pagesRes.data?.data?.[0];
     if (!page) {
+      const errorMsg = "No Facebook Pages found associated with this account.";
+      if (isJsonClient) {
+        return res.status(404).json({ success: false, message: errorMsg });
+      }
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard?error=no_facebook_pages_found`,
+        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMsg)}`
       );
     }
 
-    // Fallback: Use Page Access Token first, otherwise fall back to Long-Lived User Token
+    // Page Access Tokens never expire unless permissions are revoked
     const finalAccessToken = page.access_token || longLivedToken;
 
     // 5. Save tokens to database
-    await User.findByIdAndUpdate(
+    const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
         $set: {
@@ -156,19 +161,41 @@ export const facebookCallback = async (req: Request, res: Response) => {
           "socialProfiles.facebook": `https://facebook.com/${page.id}`,
         },
       },
-      { new: true },
+      { new: true }
     );
 
+    if (!updatedUser) {
+      throw new Error(`User with ID ${userId} not found in database.`);
+    }
+
+    // If testing in Postman, return direct JSON instead of attempting browser redirect
+    if (isJsonClient) {
+      return res.status(200).json({
+        success: true,
+        message: "Facebook connected successfully.",
+        pageId: page.id,
+        pageName: page.name,
+      });
+    }
+
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`,
+      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`
     );
   } catch (error: any) {
     const errorMessage =
       error?.response?.data?.error?.message || error.message || "OAuth failed";
     console.error("Facebook OAuth Error:", error?.response?.data || error);
 
+    if (isJsonClient) {
+      return res.status(500).json({
+        success: false,
+        message: errorMessage,
+        errorDetails: error?.response?.data || null,
+      });
+    }
+
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`,
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`
     );
   }
 };
