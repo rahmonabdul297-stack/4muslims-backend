@@ -47,23 +47,35 @@ export const publishToYouTube = async (
 };
 
 export const publishToFacebookVideo = async (
-  pageAccessToken: string,
+  pageToken: string,
   pageId: string,
   videoUrl: string,
-  description: string,
+  title: string,
+  videoDescription: string
 ): Promise<string> => {
-  // Facebook Graph API accepts external video URLs directly via file_url parameter
-  const response = await axios.post(
-    `https://graph.facebook.com/v19.0/${pageId}/videos`,
-    {
-      file_url: videoUrl,
-      description,
-      access_token: pageAccessToken,
-    },
-  );
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v19.0/${pageId}/videos`,
+      {
+        file_url: videoUrl,
+        title: title,
+        description: videoDescription,
+        access_token: pageToken,
+      }
+    );
 
-  return response.data.id;
+    if (!response.data?.id) {
+      throw new Error("No video ID returned from Facebook API.");
+    }
+
+    return response.data.id;
+  } catch (error: any) {
+    const fbError = error?.response?.data?.error;
+    console.error("Facebook API Error Output:", fbError || error.message);
+    throw new Error(`Facebook Upload Failed: ${fbError?.message || error.message}`);
+  }
 };
+
 export const publishToTikTokDirectPost = async (
   accessToken: string,
   videoUrl: string,

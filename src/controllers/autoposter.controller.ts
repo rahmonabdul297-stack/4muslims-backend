@@ -16,7 +16,9 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
     // Fetch User & verify subscription
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found." });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     }
 
     const plan = user.plan?.toUpperCase();
@@ -27,7 +29,8 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
     if (!isEligible) {
       return res.status(403).json({
         success: false,
-        message: "Automated posting is exclusive to active PRO and ULTIMATE plans.",
+        message:
+          "Automated posting is exclusive to active PRO and ULTIMATE plans.",
       });
     }
 
@@ -58,7 +61,7 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
       defaultReciterId:
         defaultReciterId !== undefined
           ? defaultReciterId
-          : user.autoPostSettings?.defaultReciterId ?? null,
+          : (user.autoPostSettings?.defaultReciterId ?? null),
       postFrequency,
       lastAutoPostDate: user.autoPostSettings?.lastAutoPostDate ?? null,
       monthlyAutoPostCount: user.autoPostSettings?.monthlyAutoPostCount ?? 0,
@@ -89,13 +92,13 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
 
 export const triggerQuranAutoPost = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).id || (req as any).user?._id;
+    const userId = (req as any).id;
     const user = await User.findById(userId);
 
-    if (!user || user.plan === "FREE") {
+    if (!user || user.plan === "FREE" || user.subscriptionStatus !== "active") {
       return res.status(403).json({
         success: false,
-        message: "Pro or Ultimate subscription required for automated posting.",
+        message: "Active Pro or Ultimate subscription required for automated posting.",
       });
     }
 
@@ -108,11 +111,23 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     }
 
     const platform = autoPostSettings.selectedPlatform;
-    
-    // Generate content using configured reciter preference
-    const quranData = await generateQuranContent(autoPostSettings.defaultReciterId);
-    const generatedVideoUrl = quranData.audioUrl;
+
+    // Generate Quran content using configured reciter preference
+    const quranData = await generateQuranContent(
+      autoPostSettings.defaultReciterId
+    );
+
+    // CRITICAL FIX: Ensure mediaUrl points to a valid MP4 video asset, not a raw audio file (.mp3)
+    const generatedVideoUrl = quranData.videoUrl || quranData.mediaUrl;
+    if (!generatedVideoUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to render or retrieve a valid video MP4 asset for auto-posting.",
+      });
+    }
+
     const videoTitle = `Surah ${quranData.surahName} [${quranData.ayahNumber}] - Recitation`;
+    const videoDescription = quranData.description || `${videoTitle}\n\nAutomated Quran Recitation Post`;
 
     let postId: string | null = null;
 
@@ -130,7 +145,7 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
           token,
           generatedVideoUrl,
           videoTitle,
-          quranData.description
+          videoDescription
         );
         break;
       }
@@ -164,7 +179,8 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
           pageToken,
           pageId,
           generatedVideoUrl,
-          quranData.description
+          videoTitle,        // Added title parameter
+          videoDescription  // Passed description
         );
         break;
       }
@@ -176,10 +192,14 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
         });
     }
 
-    // Update execution history counters
+    // Safely update execution history counters
+    const currentCount = user.autoPostSettings.monthlyAutoPostCount || 0;
+    
     user.autoPostSettings.lastAutoPostDate = new Date();
-    user.autoPostSettings.monthlyAutoPostCount =
-      (user.autoPostSettings.monthlyAutoPostCount || 0) + 1;
+    user.autoPostSettings.monthlyAutoPostCount = currentCount + 1;
+
+    // Mark Mongoose nested subdocument as modified to ensure save persistence
+    user.markModified("autoPostSettings");
     await user.save();
 
     return res.status(200).json({
@@ -192,8 +212,10 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
       publishedPlatform: platform,
       publishedPostId: postId,
     });
-  } catch (error) {
-    console.error("Auto Post Error:", (error as Error).message);
-    return sendErrorResponse(res, (error as Error).message);
+  } catch (error: any) {
+    console.error("Auto Post Error Details:", error?.response?.data || error.message);
+    
+    const errorMessage = error?.response?.data?.error?.message || error.message || "Error executing auto-post";
+    return sendErrorResponse(res, errorMessage, 500);
   }
 };

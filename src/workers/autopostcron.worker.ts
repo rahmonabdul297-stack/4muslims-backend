@@ -32,7 +32,9 @@ cron.schedule("0 9 * * *", async () => {
       if (user.plan === "PRO") {
         const currentCount = autoPostSettings?.monthlyAutoPostCount || 0;
         if (currentCount >= 5) {
-          console.log(`User ${user._id} reached 5 posts/month PRO limit. Skipping...`);
+          console.log(
+            `User ${user._id} reached 5 posts/month PRO limit. Skipping...`,
+          );
           continue;
         }
       }
@@ -46,7 +48,9 @@ cron.schedule("0 9 * * *", async () => {
           lastPost.getDate() === now.getDate();
 
         if (isSameDay) {
-          console.log(`User ${user._id} already received today's auto-post. Skipping...`);
+          console.log(
+            `User ${user._id} already received today's auto-post. Skipping...`,
+          );
           continue;
         }
       }
@@ -68,7 +72,7 @@ cron.schedule("0 9 * * *", async () => {
               token,
               quranData.audioUrl,
               quranData.title,
-              quranData.description
+              quranData.description,
             );
             break;
           }
@@ -82,7 +86,7 @@ cron.schedule("0 9 * * *", async () => {
             postId = await publishToTikTokDirectPost(
               token,
               quranData.audioUrl,
-              quranData.title
+              quranData.title,
             );
             break;
           }
@@ -97,27 +101,33 @@ cron.schedule("0 9 * * *", async () => {
             postId = await publishToFacebookVideo(
               pageToken,
               pageId,
+              quranData.videoUrl,
               quranData.audioUrl,
-              quranData.description
+              quranData.description,
             );
             break;
           }
 
           default:
-            console.warn(`User ${user._id} has an unsupported platform: ${platform}`);
+            console.warn(
+              `User ${user._id} has an unsupported platform: ${platform}`,
+            );
             continue;
         }
 
         // 5. Update user post timestamps & counters
         user.autoPostSettings.lastAutoPostDate = now;
-        user.autoPostSettings.monthlyAutoPostCount = (user.autoPostSettings.monthlyAutoPostCount || 0) + 1;
+        user.autoPostSettings.monthlyAutoPostCount =
+          (user.autoPostSettings.monthlyAutoPostCount || 0) + 1;
         await user.save();
 
-        console.log(`Successfully posted Quran video for User ${user._id} to ${platform.toUpperCase()} (Post ID: ${postId})`);
+        console.log(
+          `Successfully posted Quran video for User ${user._id} to ${platform.toUpperCase()} (Post ID: ${postId})`,
+        );
       } catch (postError) {
         console.error(
           `Failed auto-posting for User ${user._id} on ${platform}:`,
-          (postError as Error).message
+          (postError as Error).message,
         );
       }
     }

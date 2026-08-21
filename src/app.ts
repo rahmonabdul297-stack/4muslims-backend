@@ -9,7 +9,7 @@ import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = 7777;
+const PORT = 9999;
 
 app.use(express.json({ limit: "100mb" }));
 connectDB();
