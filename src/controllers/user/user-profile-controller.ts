@@ -30,9 +30,17 @@ const updateUserProfile = async (req: Request, res: Response) => {
       return sendErrorResponse(res, "User doesn't exist!", 404);
     }
 
-    // 1. Handle Text Fields & Social Profiles (from req.body)
-    const { name, email, password, socialProfiles, youtube, tiktok, facebook } =
-      req.body;
+    // 1. Extract body params (including socialTokens)
+    const {
+      name,
+      email,
+      password,
+      socialProfiles,
+      youtube,
+      tiktok,
+      facebook,
+      socialTokens, // <--- Added socialTokens from req.body
+    } = req.body;
 
     if (name) user.name = name;
     if (email) user.email = email.toLowerCase();
@@ -41,12 +49,19 @@ const updateUserProfile = async (req: Request, res: Response) => {
       user.password = bcrypt.hashSync(password, salt);
     }
 
-    // Initialize socialProfiles object if it doesn't exist on user document yet
+    // Initialize nested objects if they don't exist yet
     if (!user.socialProfiles) {
       user.socialProfiles = { youtube: "", tiktok: "", facebook: "" };
     }
+    if (!user.socialTokens) {
+      user.socialTokens = {
+        facebook: { accessToken: "", pageId: "" },
+        youtube: { accessToken: "", refreshToken: "" },
+        tiktok: { accessToken: "", refreshToken: "" },
+      } as any;
+    }
 
-    // Accept nested object format: req.body.socialProfiles = { youtube: '...', ... }
+    // --- Handle Social Profiles (URLs) ---
     if (socialProfiles) {
       if (socialProfiles.youtube !== undefined)
         user.socialProfiles.youtube = socialProfiles.youtube;
@@ -56,16 +71,46 @@ const updateUserProfile = async (req: Request, res: Response) => {
         user.socialProfiles.facebook = socialProfiles.facebook;
     }
 
-    // Also accept top-level fields: req.body.youtube, req.body.tiktok, req.body.facebook
     if (youtube !== undefined) user.socialProfiles.youtube = youtube;
     if (tiktok !== undefined) user.socialProfiles.tiktok = tiktok;
     if (facebook !== undefined) user.socialProfiles.facebook = facebook;
+
+    // --- Handle Manual Tokens Update ---
+    // Accept nested object: req.body.socialTokens.facebook = { accessToken: "...", pageId: "..." }
+    if (socialTokens?.facebook) {
+      if (!user.socialTokens?.facebook) {
+        user.socialTokens!.facebook = { accessToken: "", pageId: "" };
+      }
+      if (socialTokens.facebook.accessToken !== undefined) {
+        user.socialTokens!.facebook.accessToken =
+          socialTokens.facebook.accessToken;
+      }
+      if (socialTokens.facebook.pageId !== undefined) {
+        user.socialTokens!.facebook.pageId = socialTokens.facebook.pageId;
+      }
+    }
+
+    // Also accept top-level fields for quick payload testing:
+    // req.body.facebookAccessToken & req.body.facebookPageId
+    if (
+      req.body.facebookAccessToken !== undefined ||
+      req.body.facebookPageId !== undefined
+    ) {
+      if (!user.socialTokens?.facebook) {
+        user.socialTokens!.facebook = { accessToken: "", pageId: "" };
+      }
+      if (req.body.facebookAccessToken !== undefined) {
+        user.socialTokens!.facebook.accessToken = req.body.facebookAccessToken;
+      }
+      if (req.body.facebookPageId !== undefined) {
+        user.socialTokens!.facebook.pageId = req.body.facebookPageId;
+      }
+    }
 
     // 2. Handle File Upload (from req.file)
     const newProfilePic = req.file;
 
     if (newProfilePic) {
-      // Delete old image from Cloudinary if present
       if (user.profileImage && user.profileImage.includes("cloudinary.com")) {
         try {
           const urlParts = user.profileImage.split("/");
@@ -81,7 +126,6 @@ const updateUserProfile = async (req: Request, res: Response) => {
         }
       }
 
-      // Upload new image
       const cloudinaryResponse = await cloudinaryUploader(
         newProfilePic.buffer,
         "user-profiles",
@@ -98,10 +142,9 @@ const updateUserProfile = async (req: Request, res: Response) => {
       user.profileImage = cloudinaryResponse.secure_url;
     }
 
-    // 3. Save all changes (text + social links + image) in a single DB write
+    // 3. Save changes in MongoDB
     await user.save();
 
-    // Hide sensitive data before sending back
     user.password = undefined as any;
 
     return sendSuccessResponse(res, "Profile updated successfully!", user);
@@ -109,6 +152,7 @@ const updateUserProfile = async (req: Request, res: Response) => {
     return sendErrorResponse(
       res,
       (error as Error).message || "Error updating profile!",
+      500,
     );
   }
 };
