@@ -7,6 +7,7 @@ interface QuranContent {
   ayahNumber: number;
   arabicText: string;
   translation: string;
+  videoUrl?: string; // Optional generated .mp4 URL
   audioUrl: string;
   description: string;
   title: string; // Ready-to-use title for YouTube/TikTok

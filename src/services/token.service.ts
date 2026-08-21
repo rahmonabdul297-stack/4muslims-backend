@@ -63,7 +63,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
   // 1. Get Short-Lived User Access Token
   const tokenRes = await axios.get(
-    "https://graph.facebook.com/v19.0/oauth/access_token",
+    "https://graph.facebook.com/v26.0/oauth/access_token",
     {
       params: {
         client_id: process.env.FACEBOOK_APP_ID,
@@ -77,7 +77,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
   // 2. Exchange for Long-Lived Token
   const longLivedRes = await axios.get(
-    "https://graph.facebook.com/v19.0/oauth/access_token",
+    "https://graph.facebook.com/v26.0/oauth/access_token",
     {
       params: {
         grant_type: "fb_exchange_token",
@@ -91,7 +91,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
   // 3. Fetch User's Pages (Returns page access_token and page id)
   const pagesRes = await axios.get(
-    "https://graph.facebook.com/v19.0/me/accounts",
+    "https://graph.facebook.com/v26.0/me/accounts",
     {
       params: { access_token: longLivedToken },
     },

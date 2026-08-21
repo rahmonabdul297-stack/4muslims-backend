@@ -1,32 +1,25 @@
 import axios from "axios";
 
+// 1. YouTube Data API v3 Upload
 export const publishToYouTube = async (
-  accessToken: string,
+  accessToken: string | undefined,
   videoUrl: string,
   title: string,
-  description: string,
+  description: String,
 ): Promise<string> => {
-  // Step A: Fetch video binary as arraybuffer / stream
-  const videoStream = await axios.get(videoUrl, {
-    responseType: "arraybuffer",
-  });
-
-  const metadata = {
-    snippet: {
-      title,
-      description,
-      tags: ["Quran", "Islam", "Motivation", "Reminders"],
-      categoryId: "22", // People & Blogs
+  // YouTube expects a direct upload or video insertion via resumable upload protocol
+  const response = await axios.post(
+    "https://www.googleapis.com/youtube/v3/videos?part=snippet,status",
+    {
+      snippet: {
+        title,
+        description,
+        categoryId: "22", // People & Blogs
+      },
+      status: {
+        privacyStatus: "public",
+      },
     },
-    status: {
-      privacyStatus: "public",
-    },
-  };
-
-  // Step B: Initialize Resumable Upload Session
-  const initResponse = await axios.post(
-    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-    metadata,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -34,63 +27,24 @@ export const publishToYouTube = async (
       },
     },
   );
-
-  const uploadUrl = initResponse.headers.location;
-
-  const uploadResponse = await axios.put(uploadUrl, videoStream.data, {
-    headers: {
-      "Content-Type": "video/mp4",
-    },
-  });
-
-  return uploadResponse.data.id;
+  return response.data.id;
 };
 
-export const publishToFacebookVideo = async (
-  pageToken: string,
-  pageId: string,
-  videoUrl: string,
-  title: string,
-  videoDescription: string
-): Promise<string> => {
-  try {
-    const response = await axios.post(
-      `https://graph.facebook.com/v19.0/${pageId}/videos`,
-      {
-        file_url: videoUrl,
-        title: title,
-        description: videoDescription,
-        access_token: pageToken,
-      }
-    );
-
-    if (!response.data?.id) {
-      throw new Error("No video ID returned from Facebook API.");
-    }
-
-    return response.data.id;
-  } catch (error: any) {
-    const fbError = error?.response?.data?.error;
-    console.error("Facebook API Error Output:", fbError || error.message);
-    throw new Error(`Facebook Upload Failed: ${fbError?.message || error.message}`);
-  }
-};
-
+// 2. TikTok Direct Post API
 export const publishToTikTokDirectPost = async (
-  accessToken: string,
+  accessToken: string | undefined,
   videoUrl: string,
   title: string,
 ): Promise<string> => {
-  // Step A: Initialize post request on TikTok Direct Post API
+  // Initialize TikTok direct post via URL source
   const initResponse = await axios.post(
     "https://open.tiktokapis.com/v2/post/publish/video/init/",
     {
       post_info: {
-        title,
+        title: title.slice(0, 150),
         privacy_level: "PUBLIC_TO_EVERYONE",
         disable_duet: false,
         disable_stitch: false,
-        disable_comment: false,
       },
       source_info: {
         source: "PULL_FROM_URL",
@@ -104,6 +58,25 @@ export const publishToTikTokDirectPost = async (
       },
     },
   );
-
   return initResponse.data.data.publish_id;
+};
+
+// 3. Facebook Graph API Page Video Upload
+export const publishToFacebookVideo = async (
+  pageToken: string,
+  pageId: string,
+  videoUrl: string,
+  title: string,
+  description: string,
+): Promise<string> => {
+  const response = await axios.post(
+    `https://graph.facebook.com/v26.0/${pageId}/videos`,
+    {
+      file_url: videoUrl,
+      title,
+      description,
+      access_token: pageToken,
+    },
+  );
+  return response.data.id;
 };

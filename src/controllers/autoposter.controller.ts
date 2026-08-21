@@ -7,8 +7,7 @@ import {
   publishToTikTokDirectPost,
   publishToFacebookVideo,
 } from "../services/socialpublisher.service.ts";
-import { sendErrorResponse } from "../utils/helper.ts";
-
+import { generateVideoFromAudio } from "../services/video.service.ts";
 export const updateAutoPostSettings = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
@@ -95,10 +94,10 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     const userId = (req as any).id;
     const user = await User.findById(userId);
 
-    if (!user || user.plan === "FREE" || user.subscriptionStatus !== "active") {
+    if (!user || user.subscriptionStatus !== "active") {
       return res.status(403).json({
         success: false,
-        message: "Active Pro or Ultimate subscription required for automated posting.",
+        message: "Active subscription required for automated posting.",
       });
     }
 
@@ -106,62 +105,48 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     if (!autoPostSettings?.enabled) {
       return res.status(400).json({
         success: false,
-        message: "Automated posting is currently disabled in your settings.",
+        message: "Automated posting is currently disabled in settings.",
       });
     }
 
     const platform = autoPostSettings.selectedPlatform;
 
-    // Generate Quran content using configured reciter preference
+    // 1. Fetch verse, recitation audio, and platform-tailored copy
     const quranData = await generateQuranContent(
-      autoPostSettings.defaultReciterId
+      autoPostSettings.defaultReciterId,
+      platform,
     );
 
-    // CRITICAL FIX: Ensure mediaUrl points to a valid MP4 video asset, not a raw audio file (.mp3)
-    const generatedVideoUrl = quranData.videoUrl || quranData.mediaUrl;
-    if (!generatedVideoUrl) {
-      return res.status(500).json({
-        success: false,
-        message: "Failed to render or retrieve a valid video MP4 asset for auto-posting.",
-      });
-    }
-
-    const videoTitle = `Surah ${quranData.surahName} [${quranData.ayahNumber}] - Recitation`;
-    const videoDescription = quranData.description || `${videoTitle}\n\nAutomated Quran Recitation Post`;
+    // 2. Generate video asset (.mp4)
+    const videoUrl = await generateVideoFromAudio({
+      audioUrl: quranData.audioUrl,
+      arabicText: quranData.arabicText,
+      translation: quranData.translation,
+      surahName: quranData.surahName,
+      ayahNumber: quranData.ayahNumber,
+    });
 
     let postId: string | null = null;
 
-    // Dispatch strictly to selected platform
+    // 3. Dispatch to selected social platform
     switch (platform) {
       case "youtube": {
         const token = user.socialTokens?.youtube?.accessToken;
-        if (!token) {
-          return res.status(400).json({
-            success: false,
-            message: "YouTube account is not connected.",
-          });
-        }
         postId = await publishToYouTube(
           token,
-          generatedVideoUrl,
-          videoTitle,
-          videoDescription
+          videoUrl,
+          quranData.title,
+          quranData.description,
         );
         break;
       }
 
       case "tiktok": {
         const token = user.socialTokens?.tiktok?.accessToken;
-        if (!token) {
-          return res.status(400).json({
-            success: false,
-            message: "TikTok account is not connected.",
-          });
-        }
         postId = await publishToTikTokDirectPost(
           token,
-          generatedVideoUrl,
-          videoTitle
+          videoUrl,
+          quranData.title,
         );
         break;
       }
@@ -172,50 +157,38 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
         if (!pageToken || !pageId) {
           return res.status(400).json({
             success: false,
-            message: "Facebook Page is not fully connected.",
+            message:
+              "Facebook Page is not connected. Reconnect it before posting.",
           });
         }
         postId = await publishToFacebookVideo(
           pageToken,
           pageId,
-          generatedVideoUrl,
-          videoTitle,        // Added title parameter
-          videoDescription  // Passed description
+          videoUrl,
+          quranData.title,
+          quranData.description,
         );
         break;
       }
-
-      default:
-        return res.status(400).json({
-          success: false,
-          message: `Unsupported platform: ${platform}`,
-        });
     }
 
-    // Safely update execution history counters
-    const currentCount = user.autoPostSettings.monthlyAutoPostCount || 0;
-    
+    // 4. Record execution timestamp and post count
     user.autoPostSettings.lastAutoPostDate = new Date();
-    user.autoPostSettings.monthlyAutoPostCount = currentCount + 1;
-
-    // Mark Mongoose nested subdocument as modified to ensure save persistence
+    user.autoPostSettings.monthlyAutoPostCount =
+      (user.autoPostSettings.monthlyAutoPostCount || 0) + 1;
     user.markModified("autoPostSettings");
     await user.save();
 
     return res.status(200).json({
       success: true,
       message: `Quran video generated and posted to ${platform.toUpperCase()} successfully!`,
-      quranDetails: {
-        surah: quranData.surahName,
-        ayah: quranData.ayahNumber,
-      },
-      publishedPlatform: platform,
       publishedPostId: postId,
     });
   } catch (error: any) {
-    console.error("Auto Post Error Details:", error?.response?.data || error.message);
-    
-    const errorMessage = error?.response?.data?.error?.message || error.message || "Error executing auto-post";
-    return sendErrorResponse(res, errorMessage, 500);
+    console.error("Auto Post Error:", error?.response?.data || error.message);
+    return res.status(500).json({
+      success: false,
+      message: error?.response?.data?.error?.message || error.message,
+    });
   }
 };

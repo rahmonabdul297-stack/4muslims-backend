@@ -72,14 +72,17 @@ export const youtubeCallback = async (req: Request, res: Response) => {
 // -------------------------------------------------------------
 export const getFacebookAuthUrl = (req: Request, res: Response) => {
   const userId = (req as any).id;
-  const scope = "pages_show_list,pages_read_engagement,pages_manage_posts";
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}&scope=${scope}&state=${userId}`;
+  const scope =
+    "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,pages_read_user_content";
+  const url = `https://www.facebook.com/v26.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}&scope=${scope}&state=${userId}`;
   return res.status(200).json({ success: true, url });
 };
 
 export const facebookCallback = async (req: Request, res: Response) => {
   // Flag to check if request came from Postman or direct JSON client
-  const isJsonClient = req.headers["accept"]?.includes("application/json") || req.headers["user-agent"]?.includes("Postman");
+  const isJsonClient =
+    req.headers["accept"]?.includes("application/json") ||
+    req.headers["user-agent"]?.includes("Postman");
 
   try {
     // 1. Extract query parameters
@@ -98,7 +101,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
     // 2. Exchange authorization code for short-lived token
     const tokenRes = await axios.get(
-      "https://graph.facebook.com/v19.0/oauth/access_token",
+      "https://graph.facebook.com/v26.0/oauth/access_token",
       {
         params: {
           client_id: process.env.FACEBOOK_APP_ID,
@@ -106,17 +109,19 @@ export const facebookCallback = async (req: Request, res: Response) => {
           redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
           code,
         },
-      }
+      },
     );
 
     const shortLivedToken = tokenRes.data?.access_token;
     if (!shortLivedToken) {
-      throw new Error("Failed to obtain short-lived access token from Facebook.");
+      throw new Error(
+        "Failed to obtain short-lived access token from Facebook.",
+      );
     }
 
     // 3. Exchange short-lived token for long-lived user token (~60 days)
     const longLivedRes = await axios.get(
-      "https://graph.facebook.com/v19.0/oauth/access_token",
+      "https://graph.facebook.com/v26.0/oauth/access_token",
       {
         params: {
           grant_type: "fb_exchange_token",
@@ -124,17 +129,17 @@ export const facebookCallback = async (req: Request, res: Response) => {
           client_secret: process.env.FACEBOOK_APP_SECRET,
           fb_exchange_token: shortLivedToken,
         },
-      }
+      },
     );
 
     const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
 
     // 4. Fetch Pages and Page Access Token
     const pagesRes = await axios.get(
-      "https://graph.facebook.com/v19.0/me/accounts",
+      "https://graph.facebook.com/v26.0/me/accounts",
       {
         params: { access_token: longLivedToken },
-      }
+      },
     );
 
     const page = pagesRes.data?.data?.[0];
@@ -144,12 +149,18 @@ export const facebookCallback = async (req: Request, res: Response) => {
         return res.status(404).json({ success: false, message: errorMsg });
       }
       return res.redirect(
-        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMsg)}`
+        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMsg)}`,
       );
     }
 
-    // Page Access Tokens never expire unless permissions are revoked
-    const finalAccessToken = page.access_token || longLivedToken;
+    // Publishing must use the Page token returned by /me/accounts.
+    if (!page.access_token) {
+      throw new Error(
+        "Facebook did not return a Page access token. Reconnect the Page and grant Page publishing permissions.",
+      );
+    }
+
+    const finalAccessToken = page.access_token;
 
     // 5. Save tokens to database
     const updatedUser = await User.findByIdAndUpdate(
@@ -161,7 +172,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
           "socialProfiles.facebook": `https://facebook.com/${page.id}`,
         },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedUser) {
@@ -179,7 +190,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
     }
 
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`
+      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`,
     );
   } catch (error: any) {
     const errorMessage =
@@ -195,7 +206,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
     }
 
     return res.redirect(
-      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`,
     );
   }
 };
