@@ -1,14 +1,16 @@
 {
-  "name": "intro-to-express",
+  "name": "4muslims",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "type": "module",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/app.ts",
-    "worker": "ts-node src/workers/videoRender.worker.ts"
-  },
+ "scripts": {
+  "test": "echo \"Error: no test specified\" && exit 1",
+  "dev": "nodemon src/app.ts",
+  "build": "tsc",
+  "start": "node dist/app.js",
+  "worker": "node dist/workers/videoRender.worker.js"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
