@@ -1,33 +1,35 @@
 import dotenv from "dotenv";
 import path from "path";
+import os from "os";
+import fs from "fs";
 
-// 1. Initialize environment variables FIRST before loading DB modules
+// Initialize environment variables FIRST before loading DB modules
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-import fs from "fs";
 import { Worker, Job } from "bullmq";
-import type { VideoRenderJobData } from "../types/redis.types.ts";
-import { VIDEO_RENDER_QUEUE } from "../queues/videorender.ts";
-import { findReciterConfig } from "../config/reciters.ts";
-import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
-import { redisConnection } from "../redis.ts";
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegPath from "ffmpeg-static";
-import ffprobePath from "ffprobe-static";
+import type { VideoRenderJobData } from "../types/redis.types";
+import { VIDEO_RENDER_QUEUE } from "../queues/videorender";
+import { findReciterConfig } from "../config/reciters";
+import { renderQuranOverlay } from "../services/quranOverlay.service";
+import { redisConnection } from "../redis";
 
-if (ffmpegPath) ffmpeg.setFfmpegPath(String(ffmpegPath));
-if (ffprobePath.path) ffmpeg.setFfprobePath(ffprobePath.path);
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
+import ffprobeInstaller from "@ffprobe-installer/ffprobe";
+
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+ffmpeg.setFfprobePath(ffprobeInstaller.path);
+
 const clearTempDir = async (jobId: string) => {
-  const dir = path.join(process.cwd(), "tmp", jobId);
+  const dir = path.join(os.tmpdir(), "quran-renders", jobId);
   if (fs.existsSync(dir)) {
     await fs.promises.rm(dir, { recursive: true, force: true });
   }
 };
 
 const initWorker = async () => {
-  // 2. Dynamically import DB and Models AFTER dotenv has populated process.env
-  const { default: connectDB } = await import("../db/index.ts");
-  const { GeneratedVideo } = await import("../models/generatevideo.ts");
+  const { default: connectDB } = await import("../db/index");
+  const { GeneratedVideo } = await import("../models/generatevideo");
 
   await connectDB();
 
@@ -40,7 +42,7 @@ const initWorker = async () => {
       errorMessage: string;
       audioUrl?: string;
       globalAyahNumber?: number;
-    }>,
+    }>
   ) => {
     await GeneratedVideo.findByIdAndUpdate(mongoRenderId, data, {
       returnDocument: "after",
@@ -83,7 +85,7 @@ const initWorker = async () => {
           ayahNumber: payload.ayahNumber,
           reciterId: payload.reciterId,
           reciterName: reciterConfig.name,
-        },
+        }
       );
 
       let lastReportedProgress = 10;
@@ -108,7 +110,7 @@ const initWorker = async () => {
 
               updateRenderStatus(payload.mongoRenderId, { progress })
                 .catch((err) =>
-                  console.error("Failed to update progress in DB:", err),
+                  console.error("Failed to update progress in DB:", err)
                 )
                 .finally(() => {
                   isUpdatingDb = false;
@@ -137,7 +139,7 @@ const initWorker = async () => {
       lockRenewTime: 15000,
       stalledInterval: 30000,
       maxStalledCount: 2,
-    },
+    }
   );
 
   worker.on("failed", async (job: Job<VideoRenderJobData> | undefined, err) => {
@@ -147,7 +149,7 @@ const initWorker = async () => {
       "payload:",
       job?.data,
       "error:",
-      err,
+      err
     );
     if (!job?.data?.mongoRenderId) return;
     await updateRenderStatus(job.data.mongoRenderId, {
