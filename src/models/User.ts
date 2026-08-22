@@ -25,6 +25,8 @@ export interface UserTypes extends Document {
   monthlyUsage: {
     videosGenerated: number;
     lastResetDate: Date;
+    manualGenerationsCount: number; // Added
+    autoGenerationsCount: number;   // Added
   };
   socialProfiles?: {
     youtube?: string;
@@ -79,6 +81,8 @@ const userSchema = new Schema<UserTypes>(
     monthlyUsage: {
       videosGenerated: { type: Number, default: 0 },
       lastResetDate: { type: Date, default: Date.now },
+      manualGenerationsCount: { type: Number, default: 0 }, // Added
+      autoGenerationsCount: { type: Number, default: 0 },   // Added
     },
     socialProfiles: {
       youtube: { type: String, default: "" },

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { User, UserTypes } from "../models/User.ts"
+import type { User, UserTypes } from "../models/User.ts"
 
 // Utility: Ensure valid YouTube access token
 export const getValidYouTubeToken = async (user: UserTypes): Promise<string> => {
