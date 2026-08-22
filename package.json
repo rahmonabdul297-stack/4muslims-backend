@@ -4,13 +4,13 @@
   "description": "",
   "main": "index.js",
   "type": "module",
- "scripts": {
-  "test": "echo \"Error: no test specified\" && exit 1",
-  "dev": "nodemon src/app.ts",
-  "build": "tsc",
-  "start": "node dist/app.js",
-  "worker": "node dist/workers/videoRender.worker.js"
-},
+
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/app.ts",
+    "worker": "node dist/workers/videoRender.worker.js"
+
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -38,6 +38,7 @@
     "nodemailer": "^8.0.11",
     "nodemon": "^3.1.14",
     "resend": "^6.18.0",
+    "tsx": "^4.23.12",
     "twilio": "^6.0.2"
   },
   "devDependencies": {
