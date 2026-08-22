@@ -70,7 +70,7 @@ export const publishToFacebookVideo = async (
   description: string,
 ): Promise<string> => {
   const response = await axios.post(
-    `https://graph.facebook.com/v26.0/${pageId}/videos`,
+    `https://graph.facebook.com/v19.0/${pageId}/videos`,
     {
       file_url: videoUrl,
       title,

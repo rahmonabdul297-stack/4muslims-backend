@@ -67,14 +67,11 @@ export const youtubeCallback = async (req: Request, res: Response) => {
   }
 };
 
-// -------------------------------------------------------------
-// FACEBOOK OAUTH
-// -------------------------------------------------------------
 export const getFacebookAuthUrl = (req: Request, res: Response) => {
   const userId = (req as any).id;
   const scope =
     "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,pages_read_user_content";
-  const url = `https://www.facebook.com/v26.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}&scope=${scope}&state=${userId}`;
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}&scope=${scope}&state=${userId}`;
   return res.status(200).json({ success: true, url });
 };
 
@@ -101,7 +98,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
     // 2. Exchange authorization code for short-lived token
     const tokenRes = await axios.get(
-      "https://graph.facebook.com/v26.0/oauth/access_token",
+      "https://graph.facebook.com/v19.0/oauth/access_token",
       {
         params: {
           client_id: process.env.FACEBOOK_APP_ID,
@@ -121,7 +118,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
     // 3. Exchange short-lived token for long-lived user token (~60 days)
     const longLivedRes = await axios.get(
-      "https://graph.facebook.com/v26.0/oauth/access_token",
+      "https://graph.facebook.com/v19.0/oauth/access_token",
       {
         params: {
           grant_type: "fb_exchange_token",
@@ -136,7 +133,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
     // 4. Fetch Pages and Page Access Token
     const pagesRes = await axios.get(
-      "https://graph.facebook.com/v26.0/me/accounts",
+      "https://graph.facebook.com/v19.0/me/accounts",
       {
         params: { access_token: longLivedToken },
       },

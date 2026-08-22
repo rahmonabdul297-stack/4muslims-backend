@@ -1,162 +1,203 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __importDefault =
+  (this && this.__importDefault) ||
+  function (mod) {
+    return mod && mod.__esModule ? mod : { default: mod };
+  };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.facebookCallback = exports.getFacebookAuthUrl = exports.youtubeCallback = exports.getYouTubeAuthUrl = void 0;
+exports.facebookCallback =
+  exports.getFacebookAuthUrl =
+  exports.youtubeCallback =
+  exports.getYouTubeAuthUrl =
+    void 0;
 const axios_1 = __importDefault(require("axios"));
 const googleapis_1 = require("googleapis");
 const User_ts_1 = require("../../models/User.ts");
-const oauth2Client = new googleapis_1.google.auth.OAuth2(process.env.YOUTUBE_CLIENT_ID, process.env.YOUTUBE_CLIENT_SECRET, process.env.YOUTUBE_REDIRECT_URI);
+const oauth2Client = new googleapis_1.google.auth.OAuth2(
+  process.env.YOUTUBE_CLIENT_ID,
+  process.env.YOUTUBE_CLIENT_SECRET,
+  process.env.YOUTUBE_REDIRECT_URI,
+);
 // -------------------------------------------------------------
 // YOUTUBE OAUTH
 // -------------------------------------------------------------
 const getYouTubeAuthUrl = (req, res) => {
-    const userId = req.id;
-    const url = oauth2Client.generateAuthUrl({
-        access_type: "offline", // Ensures we receive a refresh token
-        prompt: "consent", // Forces consent to ensure refresh token is returned
-        scope: [
-            "https://www.googleapis.com/auth/youtube.upload",
-            "https://www.googleapis.com/auth/youtube.readonly",
-        ],
-        state: userId, // Pass userId through OAuth state parameter
-    });
-    return res.status(200).json({ success: true, url });
+  const userId = req.id;
+  const url = oauth2Client.generateAuthUrl({
+    access_type: "offline", // Ensures we receive a refresh token
+    prompt: "consent", // Forces consent to ensure refresh token is returned
+    scope: [
+      "https://www.googleapis.com/auth/youtube.upload",
+      "https://www.googleapis.com/auth/youtube.readonly",
+    ],
+    state: userId, // Pass userId through OAuth state parameter
+  });
+  return res.status(200).json({ success: true, url });
 };
 exports.getYouTubeAuthUrl = getYouTubeAuthUrl;
 const youtubeCallback = async (req, res) => {
-    try {
-        const { code, state: userId } = req.query;
-        if (!code || !userId)
-            return res
-                .status(400)
-                .redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing_code`);
-        const { tokens } = await oauth2Client.getToken(code);
-        // Fetch channel details to construct profileUrl
-        oauth2Client.setCredentials(tokens);
-        const youtube = googleapis_1.google.youtube({ version: "v3", auth: oauth2Client });
-        const channelRes = await youtube.channels.list({
-            part: ["snippet"],
-            mine: true,
-        });
-        const channel = channelRes.data.items?.[0];
-        const customUrl = channel?.snippet?.customUrl;
-        const profileUrl = customUrl
-            ? `https://youtube.com/${customUrl}`
-            : `https://youtube.com/channel/${channel?.id}`;
-        await User_ts_1.User.findByIdAndUpdate(userId, {
-            $set: {
-                "socialTokens.youtube.accessToken": tokens.access_token,
-                "socialTokens.youtube.refreshToken": tokens.refresh_token,
-                "socialProfiles.youtube": profileUrl,
-            },
-        });
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard?connected=youtube`);
-    }
-    catch (error) {
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(error.message)}`);
-    }
+  try {
+    const { code, state: userId } = req.query;
+    if (!code || !userId)
+      return res
+        .status(400)
+        .redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing_code`);
+    const { tokens } = await oauth2Client.getToken(code);
+    // Fetch channel details to construct profileUrl
+    oauth2Client.setCredentials(tokens);
+    const youtube = googleapis_1.google.youtube({
+      version: "v3",
+      auth: oauth2Client,
+    });
+    const channelRes = await youtube.channels.list({
+      part: ["snippet"],
+      mine: true,
+    });
+    const channel = channelRes.data.items?.[0];
+    const customUrl = channel?.snippet?.customUrl;
+    const profileUrl = customUrl
+      ? `https://youtube.com/${customUrl}`
+      : `https://youtube.com/channel/${channel?.id}`;
+    await User_ts_1.User.findByIdAndUpdate(userId, {
+      $set: {
+        "socialTokens.youtube.accessToken": tokens.access_token,
+        "socialTokens.youtube.refreshToken": tokens.refresh_token,
+        "socialProfiles.youtube": profileUrl,
+      },
+    });
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?connected=youtube`,
+    );
+  } catch (error) {
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(error.message)}`,
+    );
+  }
 };
 exports.youtubeCallback = youtubeCallback;
 // -------------------------------------------------------------
 // FACEBOOK OAUTH
 // -------------------------------------------------------------
 const getFacebookAuthUrl = (req, res) => {
-    const userId = req.id;
-    const scope = "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,pages_read_user_content";
-    const url = `https://www.facebook.com/v26.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI)}&scope=${scope}&state=${userId}`;
-    return res.status(200).json({ success: true, url });
+  const userId = req.id;
+  const scope =
+    "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,pages_read_user_content";
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI)}&scope=${scope}&state=${userId}`;
+  return res.status(200).json({ success: true, url });
 };
 exports.getFacebookAuthUrl = getFacebookAuthUrl;
 const facebookCallback = async (req, res) => {
-    // Flag to check if request came from Postman or direct JSON client
-    const isJsonClient = req.headers["accept"]?.includes("application/json") ||
-        req.headers["user-agent"]?.includes("Postman");
-    try {
-        // 1. Extract query parameters
-        const { code, state: userId } = req.query;
-        if (!code || !userId) {
-            return res.status(400).json({
-                success: false,
-                message: "Missing code or state (userId) in query parameters.",
-                receivedQuery: req.query,
-            });
-        }
-        // 2. Exchange authorization code for short-lived token
-        const tokenRes = await axios_1.default.get("https://graph.facebook.com/v26.0/oauth/access_token", {
-            params: {
-                client_id: process.env.FACEBOOK_APP_ID,
-                client_secret: process.env.FACEBOOK_APP_SECRET,
-                redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
-                code,
-            },
-        });
-        const shortLivedToken = tokenRes.data?.access_token;
-        if (!shortLivedToken) {
-            throw new Error("Failed to obtain short-lived access token from Facebook.");
-        }
-        // 3. Exchange short-lived token for long-lived user token (~60 days)
-        const longLivedRes = await axios_1.default.get("https://graph.facebook.com/v26.0/oauth/access_token", {
-            params: {
-                grant_type: "fb_exchange_token",
-                client_id: process.env.FACEBOOK_APP_ID,
-                client_secret: process.env.FACEBOOK_APP_SECRET,
-                fb_exchange_token: shortLivedToken,
-            },
-        });
-        const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
-        // 4. Fetch Pages and Page Access Token
-        const pagesRes = await axios_1.default.get("https://graph.facebook.com/v26.0/me/accounts", {
-            params: { access_token: longLivedToken },
-        });
-        const page = pagesRes.data?.data?.[0];
-        if (!page) {
-            const errorMsg = "No Facebook Pages found associated with this account.";
-            if (isJsonClient) {
-                return res.status(404).json({ success: false, message: errorMsg });
-            }
-            return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMsg)}`);
-        }
-        // Publishing must use the Page token returned by /me/accounts.
-        if (!page.access_token) {
-            throw new Error("Facebook did not return a Page access token. Reconnect the Page and grant Page publishing permissions.");
-        }
-        const finalAccessToken = page.access_token;
-        // 5. Save tokens to database
-        const updatedUser = await User_ts_1.User.findByIdAndUpdate(userId, {
-            $set: {
-                "socialTokens.facebook.accessToken": finalAccessToken,
-                "socialTokens.facebook.pageId": page.id,
-                "socialProfiles.facebook": `https://facebook.com/${page.id}`,
-            },
-        }, { new: true });
-        if (!updatedUser) {
-            throw new Error(`User with ID ${userId} not found in database.`);
-        }
-        // If testing in Postman, return direct JSON instead of attempting browser redirect
-        if (isJsonClient) {
-            return res.status(200).json({
-                success: true,
-                message: "Facebook connected successfully.",
-                pageId: page.id,
-                pageName: page.name,
-            });
-        }
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard?connected=facebook`);
+  // Flag to check if request came from Postman or direct JSON client
+  const isJsonClient =
+    req.headers["accept"]?.includes("application/json") ||
+    req.headers["user-agent"]?.includes("Postman");
+  try {
+    // 1. Extract query parameters
+    const { code, state: userId } = req.query;
+    if (!code || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing code or state (userId) in query parameters.",
+        receivedQuery: req.query,
+      });
     }
-    catch (error) {
-        const errorMessage = error?.response?.data?.error?.message || error.message || "OAuth failed";
-        console.error("Facebook OAuth Error:", error?.response?.data || error);
-        if (isJsonClient) {
-            return res.status(500).json({
-                success: false,
-                message: errorMessage,
-                errorDetails: error?.response?.data || null,
-            });
-        }
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`);
+    // 2. Exchange authorization code for short-lived token
+    const tokenRes = await axios_1.default.get(
+      "https://graph.facebook.com/v19.0/oauth/access_token",
+      {
+        params: {
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          redirect_uri: process.env.FACEBOOK_REDIRECT_URI,
+          code,
+        },
+      },
+    );
+    const shortLivedToken = tokenRes.data?.access_token;
+    if (!shortLivedToken) {
+      throw new Error(
+        "Failed to obtain short-lived access token from Facebook.",
+      );
     }
+    // 3. Exchange short-lived token for long-lived user token (~60 days)
+    const longLivedRes = await axios_1.default.get(
+      "https://graph.facebook.com/v19.0/oauth/access_token",
+      {
+        params: {
+          grant_type: "fb_exchange_token",
+          client_id: process.env.FACEBOOK_APP_ID,
+          client_secret: process.env.FACEBOOK_APP_SECRET,
+          fb_exchange_token: shortLivedToken,
+        },
+      },
+    );
+    const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
+    // 4. Fetch Pages and Page Access Token
+    const pagesRes = await axios_1.default.get(
+      "https://graph.facebook.com/v19.0/me/accounts",
+      {
+        params: { access_token: longLivedToken },
+      },
+    );
+    const page = pagesRes.data?.data?.[0];
+    if (!page) {
+      const errorMsg = "No Facebook Pages found associated with this account.";
+      if (isJsonClient) {
+        return res.status(404).json({ success: false, message: errorMsg });
+      }
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMsg)}`,
+      );
+    }
+    // Publishing must use the Page token returned by /me/accounts.
+    if (!page.access_token) {
+      throw new Error(
+        "Facebook did not return a Page access token. Reconnect the Page and grant Page publishing permissions.",
+      );
+    }
+    const finalAccessToken = page.access_token;
+    // 5. Save tokens to database
+    const updatedUser = await User_ts_1.User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "socialTokens.facebook.accessToken": finalAccessToken,
+          "socialTokens.facebook.pageId": page.id,
+          "socialProfiles.facebook": `https://facebook.com/${page.id}`,
+        },
+      },
+      { new: true },
+    );
+    if (!updatedUser) {
+      throw new Error(`User with ID ${userId} not found in database.`);
+    }
+    // If testing in Postman, return direct JSON instead of attempting browser redirect
+    if (isJsonClient) {
+      return res.status(200).json({
+        success: true,
+        message: "Facebook connected successfully.",
+        pageId: page.id,
+        pageName: page.name,
+      });
+    }
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?connected=facebook`,
+    );
+  } catch (error) {
+    const errorMessage =
+      error?.response?.data?.error?.message || error.message || "OAuth failed";
+    console.error("Facebook OAuth Error:", error?.response?.data || error);
+    if (isJsonClient) {
+      return res.status(500).json({
+        success: false,
+        message: errorMessage,
+        errorDetails: error?.response?.data || null,
+      });
+    }
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`,
+    );
+  }
 };
 exports.facebookCallback = facebookCallback;
 //# sourceMappingURL=socialauth.controller.js.map
