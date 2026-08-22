@@ -7,6 +7,7 @@ import os from "os";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "@ffprobe-installer/ffprobe";
+import { parseWebStream } from "music-metadata";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
@@ -97,21 +98,27 @@ const generateInMemorySrt = (
   return srtContent;
 };
 
-export const getAudioDuration = (audioUrl: string): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    ffmpeg.ffprobe(audioUrl, (err, metadata) => {
-      if (err) {
-        return reject(
-          new Error(`Failed to probe audio duration: ${err.message}`),
-        );
-      }
-      const duration = metadata.format?.duration;
-      if (!duration || isNaN(duration)) {
-        return reject(new Error("Unable to determine audio track duration."));
-      }
-      resolve(duration);
-    });
+export const getAudioDuration = async (audioUrl: string): Promise<number> => {
+  const response = await fetch(audioUrl);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch audio file. Status: ${response.status}`);
+  }
+
+  if (!response.body) {
+    throw new Error("Audio stream response body is empty.");
+  }
+
+  const metadata = await parseWebStream(response.body, {
+    mimeType: response.headers.get("content-type") || "audio/mpeg",
   });
+  const duration = metadata.format.duration;
+
+  if (!duration || isNaN(duration)) {
+    throw new Error("Unable to determine audio track duration.");
+  }
+
+  return duration;
 };
 
 export interface OverlayRenderParams {

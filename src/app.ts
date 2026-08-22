@@ -7,10 +7,10 @@ import UserProfile from "./routes/user/user-profile-route.ts";
 import VideoRoutes from "./routes/video-routes.ts";
 import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
-import "./workers/videoRender.worker.ts"
+import "./workers/videoRender.worker.ts";
 
 const app = express();
-const PORT = 6644;
+const PORT = 6795;
 
 app.use(express.json({ limit: "100mb" }));
 connectDB();

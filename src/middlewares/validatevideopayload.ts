@@ -1,8 +1,4 @@
-import fs from "fs";
-import path from "path";
-import os from "os";
-import axios from "axios";
-import ffmpeg from "fluent-ffmpeg";
+import { parseWebStream } from "music-metadata";
 
 export interface ValidationParams {
   arabicText: string;
@@ -14,79 +10,35 @@ export interface ValidationParams {
 }
 
 /**
- * Utility to retrieve audio duration in seconds using ffprobe safely
+ * Utility to retrieve audio duration in seconds using pure JavaScript parsing.
+ * Avoids spawning static ffprobe binary over HTTPS to prevent SIGSEGV crashes.
  */
 export const getAudioDuration = async (audioUrl: string): Promise<number> => {
-  // If it's already a local file path, probe directly
-  if (!audioUrl.startsWith("http://") && !audioUrl.startsWith("https://")) {
-    return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(audioUrl, (err, metadata) => {
-        if (err) {
-          return reject(
-            new Error(`Failed to probe audio duration: ${err.message}`)
-          );
-        }
-        const duration = metadata.format.duration;
-        if (!duration || isNaN(duration)) {
-          return reject(
-            new Error("Unable to determine audio track duration.")
-          );
-        }
-        resolve(duration);
-      });
-    });
+  const response = await fetch(audioUrl);
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch audio file. Status: ${response.status}`);
   }
 
-  // Generate a unique temporary local file path in /tmp
-  const tempAudioPath = path.join(
-    os.tmpdir(),
-    `audio_probe_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`
-  );
+  if (!response.body) {
+    throw new Error("Audio stream response body is empty.");
+  }
+
+  const contentType = response.headers.get("content-type") || "audio/mpeg";
 
   try {
-    // 1. Download the remote audio stream to local disk
-    const response = await axios({
-      url: audioUrl,
-      method: "GET",
-      responseType: "stream",
+    const metadata = await parseWebStream(response.body, {
+      mimeType: contentType,
     });
+    const duration = metadata.format.duration;
 
-    const writer = fs.createWriteStream(tempAudioPath);
-    response.data.pipe(writer);
-
-    await new Promise((resolve, reject) => {
-      writer.on("finish", resolve);
-      writer.on("error", reject);
-    });
-
-    // 2. Probe the safe local file
-    const duration = await new Promise<number>((resolve, reject) => {
-      ffmpeg.ffprobe(tempAudioPath, (err, metadata) => {
-        if (err) {
-          return reject(
-            new Error(`Failed to probe audio duration: ${err.message}`)
-          );
-        }
-        const dur = metadata.format.duration;
-        if (!dur || isNaN(dur)) {
-          return reject(
-            new Error("Unable to determine audio track duration.")
-          );
-        }
-        resolve(dur);
-      });
-    });
+    if (!duration || isNaN(duration)) {
+      throw new Error("Unable to determine audio track duration.");
+    }
 
     return duration;
-  } catch (error) {
-    throw new Error(
-      `Failed to probe audio duration: ${(error as Error).message}`
-    );
-  } finally {
-    // 3. Always clean up the temporary file
-    if (fs.existsSync(tempAudioPath)) {
-      await fs.promises.unlink(tempAudioPath).catch(() => {});
-    }
+  } catch (err: any) {
+    throw new Error(`Failed to probe audio duration: ${err.message}`);
   }
 };
 
@@ -104,13 +56,13 @@ export const validateRenderPayload = async ({
   // 1. Character Length Checks
   if (arabicText.length > maxArabicChars) {
     throw new Error(
-      `Arabic text is too long (${arabicText.length} chars). Maximum allowed is ${maxArabicChars} chars to prevent excessive video size.`
+      `Arabic text is too long (${arabicText.length} chars). Maximum allowed is ${maxArabicChars} chars to prevent excessive video size.`,
     );
   }
 
   if (translationText.length > maxTranslationChars) {
     throw new Error(
-      `Translation text is too long (${translationText.length} chars). Maximum allowed is ${maxTranslationChars} chars to prevent excessive video size.`
+      `Translation text is too long (${translationText.length} chars). Maximum allowed is ${maxTranslationChars} chars to prevent excessive video size.`,
     );
   }
 
@@ -118,9 +70,7 @@ export const validateRenderPayload = async ({
   const duration = await getAudioDuration(audioUrl);
   if (duration > maxDurationSeconds) {
     throw new Error(
-      `Audio recitation duration is too long (${Math.round(
-        duration
-      )}s). Maximum allowed length is ${maxDurationSeconds}s (100MB limit).`
+      `Audio recitation duration is too long (${Math.round(duration)}s). Maximum allowed length is ${maxDurationSeconds}s (100MB limit).`,
     );
   }
 
