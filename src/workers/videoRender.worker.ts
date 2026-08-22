@@ -7,11 +7,11 @@ import fs from "fs";
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 import { Worker, Job } from "bullmq";
-import type { VideoRenderJobData } from "../types/redis.types";
-import { VIDEO_RENDER_QUEUE } from "../queues/videorender";
-import { findReciterConfig } from "../config/reciters";
-import { renderQuranOverlay } from "../services/quranOverlay.service";
-import { redisConnection } from "../redis";
+import type { VideoRenderJobData } from "../types/redis.types.ts";
+import { VIDEO_RENDER_QUEUE } from "../queues/videorender.ts";
+import { findReciterConfig } from "../config/reciters.ts";
+import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
+import { redisConnection } from "../redis.ts";
 
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
@@ -28,8 +28,8 @@ const clearTempDir = async (jobId: string) => {
 };
 
 const initWorker = async () => {
-  const { default: connectDB } = await import("../db/index");
-  const { GeneratedVideo } = await import("../models/generatevideo");
+  const { default: connectDB } = await import("../db/index.ts");
+  const { GeneratedVideo } = await import("../models/generatevideo.ts");
 
   await connectDB();
 
