@@ -11,7 +11,12 @@ import { VIDEO_RENDER_QUEUE } from "../queues/videorender.ts";
 import { findReciterConfig } from "../config/reciters.ts";
 import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
 import { redisConnection } from "../redis.ts";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegPath from "ffmpeg-static";
+import ffprobePath from "ffprobe-static";
 
+if (ffmpegPath) ffmpeg.setFfmpegPath(String(ffmpegPath));
+if (ffprobePath.path) ffmpeg.setFfprobePath(ffprobePath.path);
 const clearTempDir = async (jobId: string) => {
   const dir = path.join(process.cwd(), "tmp", jobId);
   if (fs.existsSync(dir)) {

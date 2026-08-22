@@ -15,6 +15,9 @@ app.use(express.json({ limit: "100mb" }));
 connectDB();
 app.use(express.urlencoded({ limit: "100mb", extended: true }));
 // ... other routes
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "healthy" });
+});
 app.use("/api/v1/admin", Admin);
 app.use("/api/v1/public", Public);
 app.use("/api/v1/auth", UserAuth);
