@@ -235,17 +235,6 @@ export const renderQuranOverlay = async ({
         ])
         .output(tempVideoPath);
 
-      const watchdogTimeout = setTimeout(
-        () => {
-          if (!isFinished) {
-            isFinished = true;
-            command.kill("SIGKILL");
-            reject(new Error("Render operation timed out after 5 minutes"));
-          }
-        },
-        Number(process.env.RENDER_TIMEOUT_MS) || 900000,
-      );
-
       let lastProgressTime = 0;
 
       if (onProgress) {
@@ -288,7 +277,6 @@ export const renderQuranOverlay = async ({
       command.on("error", (err) => {
         if (isFinished) return;
         isFinished = true;
-        clearTimeout(watchdogTimeout);
         reject(new Error(`FFmpeg rendering failed: ${err.message}`));
       });
 
@@ -299,7 +287,6 @@ export const renderQuranOverlay = async ({
       command.on("end", () => {
         if (isFinished) return;
         isFinished = true;
-        clearTimeout(watchdogTimeout);
         console.log(`[FFmpeg]: Local render completed for job ${jobId}.`);
         resolve();
       });
