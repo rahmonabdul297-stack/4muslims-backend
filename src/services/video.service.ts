@@ -1,5 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
+import { renderQuranOverlay } from "./quranOverlay.service.ts";
 dotenv.config();
 const cloud_name = process.env.CLOUD_NAME;
 const api_key = process.env.CLOUD_API_KEY;
@@ -11,6 +12,7 @@ cloudinary.config({
   cloud_name: cloud_name,
   api_key: api_key,
   api_secret: api_secret,
+  secure: true,
 });
 
 export interface GenerateVideoParams {
@@ -31,45 +33,20 @@ export const generateVideoFromAudio = async (
     throw new Error("CLOUD_NAME is missing in environment variables.");
   }
 
-  const cleanSurah = surahName.replace(/[^a-zA-Z0-9\s]/g, "");
-  const shortTranslation =
-    translation.length > 120 ? `${translation.slice(0, 117)}...` : translation;
-
-  // Your uploaded Cloudinary background MP4 public_id
-  const baseBackgroundPublicId = "quran_template_bg";
-
-  const videoUrl = cloudinary.url(baseBackgroundPublicId, {
+  const backgroundUrl = cloudinary.url("quran_template_bg", {
     resource_type: "video",
     format: "mp4",
-    transformation: [
-      {
-        overlay: `audio:${encodeURIComponent(audioUrl).replace(/\//g, "%3A")}`,
-        flags: "layer_apply",
-      },
-      {
-        color: "#FFFFFF",
-        overlay: {
-          font_family: "Arial",
-          font_size: 42,
-          font_weight: "bold",
-          text: `Surah ${cleanSurah} [${ayahNumber}]`,
-        },
-        gravity: "north",
-        y: 180,
-      },
-      {
-        color: "#F0F0F0",
-        overlay: {
-          font_family: "Arial",
-          font_size: 32,
-          text: shortTranslation,
-        },
-        gravity: "center",
-        width: 850,
-        crop: "fit",
-      },
-    ],
+    secure: true,
   });
 
-  return videoUrl;
+  return renderQuranOverlay({
+    jobId: `autopost-${Date.now()}`,
+    videoUrl: backgroundUrl,
+    audioUrl,
+    surahNumber: undefined,
+    ayahNumber,
+    arabicText: params.arabicText,
+    translationText: translation,
+    surahName,
+  });
 };
