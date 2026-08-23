@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import axios from "axios";
 import { google } from "googleapis";
+import jwt from "jsonwebtoken";
 import { User } from "../../models/User.ts";
 
 const oauth2Client = new google.auth.OAuth2(
@@ -14,6 +15,22 @@ const oauth2Client = new google.auth.OAuth2(
 // -------------------------------------------------------------
 export const getYouTubeAuthUrl = (req: Request, res: Response) => {
   const userId = (req as any).id;
+  const jwtSecret = process.env.JWT_USER_SECRET;
+  const redirectUri = process.env.YOUTUBE_REDIRECT_URI?.trim();
+
+  if (!jwtSecret || !redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "YouTube OAuth is not configured on the server.",
+    });
+  }
+
+  const state = jwt.sign(
+    { id: userId, purpose: "youtube_connect" },
+    jwtSecret,
+    { expiresIn: "10m" },
+  );
+
   const url = oauth2Client.generateAuthUrl({
     access_type: "offline", // Ensures we receive a refresh token
     prompt: "consent", // Forces consent to ensure refresh token is returned
@@ -21,18 +38,29 @@ export const getYouTubeAuthUrl = (req: Request, res: Response) => {
       "https://www.googleapis.com/auth/youtube.upload",
       "https://www.googleapis.com/auth/youtube.readonly",
     ],
-    state: userId, // Pass userId through OAuth state parameter
+    state,
   });
   return res.status(200).json({ success: true, url });
 };
 
 export const youtubeCallback = async (req: Request, res: Response) => {
   try {
-    const { code, state: userId } = req.query;
-    if (!code || !userId)
+    const { code, state } = req.query;
+    if (!code || typeof state !== "string")
       return res
         .status(400)
         .redirect(`${process.env.FRONTEND_URL}/dashboard?error=missing_code`);
+
+    const jwtSecret = process.env.JWT_USER_SECRET;
+    if (!jwtSecret) throw new Error("JWT_USER_SECRET is not configured.");
+
+    const statePayload = jwt.verify(state, jwtSecret) as {
+      id?: string;
+      purpose?: string;
+    };
+    if (!statePayload.id || statePayload.purpose !== "youtube_connect") {
+      throw new Error("Invalid YouTube OAuth state.");
+    }
 
     const { tokens } = await oauth2Client.getToken(code as string);
 
@@ -49,7 +77,7 @@ export const youtubeCallback = async (req: Request, res: Response) => {
       ? `https://youtube.com/${customUrl}`
       : `https://youtube.com/channel/${channel?.id}`;
 
-    await User.findByIdAndUpdate(userId, {
+    await User.findByIdAndUpdate(statePayload.id, {
       $set: {
         "socialTokens.youtube.accessToken": tokens.access_token,
         "socialTokens.youtube.refreshToken": tokens.refresh_token,
