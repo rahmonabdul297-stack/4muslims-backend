@@ -127,7 +127,7 @@ const initWorker = async () => {
     {
       connection: redisConnection,
       concurrency: 1,
-      lockDuration: 300000,
+      lockDuration: Number(process.env.RENDER_TIMEOUT_MS) || 900000,
       lockRenewTime: 15000,
       stalledInterval: 30000,
       maxStalledCount: 2,

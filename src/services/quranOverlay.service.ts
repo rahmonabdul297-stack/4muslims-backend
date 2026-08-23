@@ -3,7 +3,6 @@ dotenv.config();
 
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import ffmpeg from "fluent-ffmpeg";
@@ -198,7 +197,7 @@ export const renderQuranOverlay = async ({
         .inputOptions(["-stream_loop", "-1"])
         .input(localAudioPath)
         .complexFilter([
-          `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
+          `[0:v]scale=1280:-2,setpts=N/FRAME_RATE/TB[bg]`,
           // WrapStyle=2 allows clean responsive text wrapping across video widths
           // MarginL=50 & MarginR=50 prevent text from hitting side edges or clumping awkwardly
           `[bg]subtitles='${escapedSrtPath}':force_style='Fontsize=26,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=50,MarginL=50,MarginR=50,WrapStyle=2'[outv]`,
@@ -229,18 +228,23 @@ export const renderQuranOverlay = async ({
           "-pix_fmt",
           "yuv420p",
           "-shortest",
+          "-t",
+          String(duration),
           "-max_muxing_queue_size",
           "1024",
         ])
         .output(tempVideoPath);
 
-      const watchdogTimeout = setTimeout(() => {
-        if (!isFinished) {
-          isFinished = true;
-          command.kill("SIGKILL");
-          reject(new Error("Render operation timed out after 5 minutes"));
-        }
-      }, 300000);
+      const watchdogTimeout = setTimeout(
+        () => {
+          if (!isFinished) {
+            isFinished = true;
+            command.kill("SIGKILL");
+            reject(new Error("Render operation timed out after 5 minutes"));
+          }
+        },
+        Number(process.env.RENDER_TIMEOUT_MS) || 900000,
+      );
 
       let lastProgressTime = 0;
 
