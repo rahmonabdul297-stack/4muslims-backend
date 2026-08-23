@@ -1,4 +1,5 @@
-import { parseWebStream } from "music-metadata";
+import axios from "axios";
+import { parseBuffer } from "music-metadata";
 
 export interface ValidationParams {
   arabicText: string;
@@ -11,29 +12,33 @@ export interface ValidationParams {
 
 /**
  * Utility to retrieve audio duration in seconds using pure JavaScript parsing.
- * Avoids spawning static ffprobe binary over HTTPS to prevent SIGSEGV crashes.
+ * Downloads the buffer via axios to guarantee complete binary headers are available.
  */
 export const getAudioDuration = async (audioUrl: string): Promise<number> => {
-  const response = await fetch(audioUrl);
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch audio file. Status: ${response.status}`);
+  if (!audioUrl || typeof audioUrl !== "string") {
+    throw new Error("Invalid audio URL provided.");
   }
-
-  if (!response.body) {
-    throw new Error("Audio stream response body is empty.");
-  }
-
-  const contentType = response.headers.get("content-type") || "audio/mpeg";
 
   try {
-    const metadata = await parseWebStream(response.body, {
-      mimeType: contentType,
+    // 1. Fetch entire audio file as an ArrayBuffer
+    const response = await axios.get<ArrayBuffer>(audioUrl, {
+      responseType: "arraybuffer",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      },
     });
-    const duration = metadata.format.duration;
+
+    const buffer = Buffer.from(response.data);
+    const contentType =
+      (response.headers["content-type"] as string) || "audio/mpeg";
+
+    // 2. Parse metadata from the complete buffer
+    const metadata = await parseBuffer(buffer, contentType);
+    const duration = metadata.format?.duration;
 
     if (!duration || isNaN(duration)) {
-      throw new Error("Unable to determine audio track duration.");
+      throw new Error("Audio track duration could not be extracted.");
     }
 
     return duration;
