@@ -43,6 +43,8 @@ import {
   facebookCallback,
   getFacebookAuthUrl,
   getYouTubeAuthUrl,
+  getTikTokAuthUrl,
+  tiktokCallback,
   youtubeCallback,
 } from "../../controllers/auth/socialauth.controller.ts";
 
@@ -104,8 +106,10 @@ router.put(
 
 router.get("/youtube/connect", verifyUserLoginToken, getYouTubeAuthUrl);
 router.get("/facebook/connect", verifyUserLoginToken, getFacebookAuthUrl);
+router.get("/tiktok/connect", verifyUserLoginToken, getTikTokAuthUrl);
 
 // OAuth Callback Routes (Redirected from Provider)
 router.get("/youtube/callback", youtubeCallback);
 router.get("/facebook/callback", facebookCallback);
+router.get("/tiktok/callback", tiktokCallback);
 export default router;

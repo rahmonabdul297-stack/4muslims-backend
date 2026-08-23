@@ -132,6 +132,12 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     switch (platform) {
       case "youtube": {
         const token = user.socialTokens?.youtube?.accessToken;
+        if (!token) {
+          return res.status(400).json({
+            success: false,
+            message: "YouTube is not connected. Connect it before posting.",
+          });
+        }
         postId = await publishToYouTube(
           token,
           videoUrl,
@@ -143,6 +149,12 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
 
       case "tiktok": {
         const token = user.socialTokens?.tiktok?.accessToken;
+        if (!token) {
+          return res.status(400).json({
+            success: false,
+            message: "TikTok is not connected. Connect it before posting.",
+          });
+        }
         postId = await publishToTikTokDirectPost(
           token,
           videoUrl,

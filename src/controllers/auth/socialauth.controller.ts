@@ -67,6 +67,95 @@ export const youtubeCallback = async (req: Request, res: Response) => {
   }
 };
 
+// -------------------------------------------------------------
+// TIKTOK OAUTH
+// -------------------------------------------------------------
+export const getTikTokAuthUrl = (req: Request, res: Response) => {
+  const userId = (req as any).id;
+  const clientKey = process.env.TIKTOK_CLIENT_KEY?.trim();
+  const redirectUri = process.env.TIKTOK_REDIRECT_URI?.trim();
+
+  if (!clientKey || !redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "TikTok OAuth is not configured on the server.",
+    });
+  }
+
+  const params = new URLSearchParams({
+    client_key: clientKey,
+    response_type: "code",
+    scope: "video.publish,video.upload",
+    redirect_uri: redirectUri,
+    state: userId,
+  });
+
+  return res.status(200).json({
+    success: true,
+    url: `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`,
+  });
+};
+
+export const tiktokCallback = async (req: Request, res: Response) => {
+  try {
+    const { code, state: userId } = req.query as {
+      code?: string;
+      state?: string;
+    };
+    const clientKey = process.env.TIKTOK_CLIENT_KEY?.trim();
+    const clientSecret = process.env.TIKTOK_CLIENT_SECRET?.trim();
+    const redirectUri = process.env.TIKTOK_REDIRECT_URI?.trim();
+
+    if (!code || !userId) throw new Error("Missing TikTok code or state.");
+    if (!clientKey || !clientSecret || !redirectUri) {
+      throw new Error("TikTok OAuth is not configured on the server.");
+    }
+
+    const tokenResponse = await axios.post(
+      "https://open.tiktokapis.com/v2/oauth/token/",
+      new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+      }),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    );
+
+    const { access_token: accessToken, refresh_token: refreshToken } =
+      tokenResponse.data || {};
+    if (!accessToken || !refreshToken) {
+      throw new Error("TikTok did not return valid access and refresh tokens.");
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          "socialTokens.tiktok.accessToken": accessToken,
+          "socialTokens.tiktok.refreshToken": refreshToken,
+        },
+      },
+      { new: true },
+    );
+    if (!updatedUser) throw new Error("User not found.");
+
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?connected=tiktok`,
+    );
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.error?.message ||
+      error.message ||
+      "TikTok OAuth failed";
+    console.error("TikTok OAuth Error:", error?.response?.data || error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(message)}`,
+    );
+  }
+};
+
 export const getFacebookAuthUrl = (req: Request, res: Response) => {
   const userId = (req as any).id;
   const scope =
