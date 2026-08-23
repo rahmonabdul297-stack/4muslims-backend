@@ -4,6 +4,8 @@ dotenv.config();
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { parseWebStream } from "music-metadata";
@@ -62,6 +64,23 @@ const formatSrtTime = (seconds: number): string => {
   const millis = Math.floor((seconds % 1) * 1000);
 
   return `${pad(hrs)}:${pad(mins)}:${pad(secs)},${String(millis).padStart(3, "0")}`;
+};
+
+const downloadFile = async (
+  url: string,
+  destination: string,
+): Promise<void> => {
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new Error(
+      `Failed to download render input. Status: ${response.status} (${url})`,
+    );
+  }
+
+  await pipeline(
+    Readable.fromWeb(response.body as any),
+    fs.createWriteStream(destination),
+  );
 };
 
 const generateInMemorySrt = (
@@ -150,6 +169,8 @@ export const renderQuranOverlay = async ({
 
   const tempSrtPath = path.join(workDir, `sub_${Date.now()}.srt`);
   const tempVideoPath = path.join(workDir, `render_${Date.now()}.mp4`);
+  const localVideoPath = path.join(workDir, "background.mp4");
+  const localAudioPath = path.join(workDir, "audio.mp3");
 
   await fs.promises.writeFile(tempSrtPath, srtContent, "utf8");
 
@@ -164,14 +185,18 @@ export const renderQuranOverlay = async ({
   };
 
   try {
+    // Keep network I/O outside FFmpeg; remote inputs can crash static builds on Render.
+    await downloadFile(videoUrl, localVideoPath);
+    await downloadFile(audioUrl, localAudioPath);
+
     // Step 1: Render video locally using FFmpeg with hard file size limits
     await new Promise<void>((resolve, reject) => {
       let isFinished = false;
 
       const command = ffmpeg()
-        .input(videoUrl)
+        .input(localVideoPath)
         .inputOptions(["-stream_loop", "-1"])
-        .input(audioUrl)
+        .input(localAudioPath)
         .complexFilter([
           `[0:v]setpts=N/FRAME_RATE/TB[bg]`,
           // WrapStyle=2 allows clean responsive text wrapping across video widths
@@ -188,7 +213,7 @@ export const renderQuranOverlay = async ({
           "-preset",
           "ultrafast",
           "-threads",
-          "2",
+          "1",
           "-crf",
           "30", // Keeps file size significantly smaller
           "-maxrate",

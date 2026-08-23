@@ -10,7 +10,7 @@ import connectDB from "./db/index.ts";
 import "./workers/videoRender.worker.ts";
 
 const app = express();
-const PORT = 6795;
+const PORT = Number(process.env.PORT) || 6795;
 
 app.use(express.json({ limit: "100mb" }));
 connectDB();
