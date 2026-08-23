@@ -5,8 +5,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import ffmpeg from "fluent-ffmpeg";
-import ffmpegStatic from "ffmpeg-static";
-import ffprobeStatic from "@ffprobe-installer/ffprobe";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { parseWebStream } from "music-metadata";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
@@ -34,8 +33,7 @@ const ensureCloudinaryConfig = () => {
 
 ensureCloudinaryConfig();
 
-ffmpeg.setFfmpegPath(ffmpegStatic as any);
-ffmpeg.setFfprobePath(ffprobeStatic.path);
+ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH || ffmpegInstaller.path);
 
 const bidi = bidiFactory();
 
@@ -263,6 +261,10 @@ export const renderQuranOverlay = async ({
         isFinished = true;
         clearTimeout(watchdogTimeout);
         reject(new Error(`FFmpeg rendering failed: ${err.message}`));
+      });
+
+      command.on("stderr", (line) => {
+        console.error(`[FFmpeg ${jobId}] ${line}`);
       });
 
       command.on("end", () => {

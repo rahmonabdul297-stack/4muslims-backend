@@ -7,7 +7,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/app.ts",
-    "worker": "node dist/workers/videoRender.worker.js"
+    "worker": "tsx src/workers/videoRender.worker.ts"
   },
   "keywords": [],
   "author": "",
