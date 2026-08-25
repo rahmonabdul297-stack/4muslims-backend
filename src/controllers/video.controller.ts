@@ -73,7 +73,7 @@ const validateUrlAccessible = async (url: string) => {
 
 const generateCustomVideo = async (req: Request, res: Response) => {
   const userId = (req as any).id;
-  
+
   // Attached by enforcePlanLimits middleware
   const user = (req as any).userInstance;
   const planConfig = (req as any).planConfig;

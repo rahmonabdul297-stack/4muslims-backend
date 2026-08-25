@@ -106,9 +106,7 @@ const generateInMemorySrt = (
 
     srtContent += `${i + 1}\n`;
     srtContent += `${formatSrtTime(startTime)} --> ${formatSrtTime(endTime)}\n`;
-    // Arabic: Large (26px) & Bold (\b1)
-    // Translation: Half-size (13px), Normal weight (\b0), Soft white color (\c&HE0E0E0&)
-    srtContent += `{\\fs26\\b1}${shapedArabic}\n{\\fs13\\b0\\c&HE0E0E0&}${translation}{\\r}\n\n`;
+    srtContent += `{\\fnAmiri\\fs30\\b0\\c&HFFFFFF&}${shapedArabic}\n{\\fs11\\b0\\c&HE0E0E0&}${translation}{\\r}\n\n`;
   }
 
   return srtContent;
@@ -174,6 +172,10 @@ export const renderQuranOverlay = async ({
   await fs.promises.writeFile(tempSrtPath, srtContent, "utf8");
 
   const escapedSrtPath = tempSrtPath.replace(/\\/g, "/").replace(/:/g, "\\:");
+  const escapedFontsDir = path
+    .join(process.cwd(), "src", "fonts")
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\:");
 
   const cleanupTempFiles = async () => {
     try {
@@ -198,9 +200,7 @@ export const renderQuranOverlay = async ({
         .input(localAudioPath)
         .complexFilter([
           `[0:v]scale=1280:-2,setpts=N/FRAME_RATE/TB[bg]`,
-          // WrapStyle=2 allows clean responsive text wrapping across video widths
-          // MarginL=50 & MarginR=50 prevent text from hitting side edges or clumping awkwardly
-          `[bg]subtitles='${escapedSrtPath}':force_style='Fontsize=26,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=50,MarginL=50,MarginR=50,WrapStyle=2'[outv]`,
+          `[bg]subtitles='${escapedSrtPath}':fontsdir='${escapedFontsDir}':force_style='FontName=Amiri,Fontsize=30,PrimaryColour=&H00FFFFFF&,OutlineColour=&H80000000&,BorderStyle=1,Outline=2,Alignment=2,MarginV=50,MarginL=50,MarginR=50,WrapStyle=2'[outv]`,
         ])
         .outputOptions([
           "-map",
