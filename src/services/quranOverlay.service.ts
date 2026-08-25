@@ -7,7 +7,7 @@ import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
-import { parseWebStream } from "music-metadata";
+import { parseBuffer } from "music-metadata";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
@@ -119,11 +119,8 @@ export const getAudioDuration = async (audioUrl: string): Promise<number> => {
     throw new Error(`Failed to fetch audio file. Status: ${response.status}`);
   }
 
-  if (!response.body) {
-    throw new Error("Audio stream response body is empty.");
-  }
-
-  const metadata = await parseWebStream(response.body, {
+  const audioBuffer = Buffer.from(await response.arrayBuffer());
+  const metadata = await parseBuffer(audioBuffer, {
     mimeType: response.headers.get("content-type") || "audio/mpeg",
   });
   const duration = metadata.format.duration;
