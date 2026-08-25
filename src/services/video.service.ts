@@ -1,6 +1,7 @@
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import { renderQuranOverlay } from "./quranOverlay.service.ts";
+import { Video } from "../models/videotemp.ts";
 dotenv.config();
 const cloud_name = process.env.CLOUD_NAME;
 const api_key = process.env.CLOUD_API_KEY;
@@ -23,9 +24,14 @@ export interface GenerateVideoParams {
   ayahNumber: number;
 }
 
+export interface GeneratedVideoResult {
+  videoUrl: string;
+  templateId: string;
+}
+
 export const generateVideoFromAudio = async (
   params: GenerateVideoParams,
-): Promise<string> => {
+): Promise<GeneratedVideoResult> => {
   const { audioUrl, surahName, ayahNumber, translation } = params;
 
   const cloudName = process.env.CLOUD_NAME;
@@ -33,13 +39,20 @@ export const generateVideoFromAudio = async (
     throw new Error("CLOUD_NAME is missing in environment variables.");
   }
 
-  const backgroundUrl = cloudinary.url("quran_template_bg", {
-    resource_type: "video",
-    format: "mp4",
-    secure: true,
-  });
+  const templates = await Video.find({ isActive: true }).select({
+    _id: 1,
+    videoUrl: 1,
+  }).lean();
+  const template = templates[Math.floor(Math.random() * templates.length)];
+  const backgroundUrl = template?.videoUrl;
 
-  return renderQuranOverlay({
+  if (!backgroundUrl) {
+    throw new Error(
+      "No active video templates are available. Upload at least one active video template.",
+    );
+  }
+
+  const videoUrl = await renderQuranOverlay({
     jobId: `autopost-${Date.now()}`,
     videoUrl: backgroundUrl,
     audioUrl,
@@ -49,4 +62,9 @@ export const generateVideoFromAudio = async (
     translationText: translation,
     surahName,
   });
+
+  return {
+    videoUrl,
+    templateId: String(template._id),
+  };
 };

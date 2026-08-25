@@ -4,7 +4,9 @@ export type SocialPlatform = "youtube" | "tiktok" | "facebook";
 
 interface QuranContent {
   surahName: string;
+  surahNumber: number;
   ayahNumber: number;
+  reciterId: string;
   arabicText: string;
   translation: string;
   videoUrl?: string; // Optional generated .mp4 URL
@@ -31,6 +33,7 @@ export const generateQuranContent = async (
   const translationText: string = data[1].text;
   const audioUrl: string = data[2].audio;
   const surahName: string = data[0].surah.englishName;
+  const surahNumber: number = data[0].surah.number;
   const ayahNumber: number = data[0].numberInSurah;
 
   const cleanSurah = surahName.replace(/[^a-zA-Z0-9]/g, "");
@@ -76,7 +79,9 @@ export const generateQuranContent = async (
 
   return {
     surahName,
+    surahNumber,
     ayahNumber,
+    reciterId: activeReciter,
     arabicText: uthmaniText,
     translation: translationText,
     audioUrl,

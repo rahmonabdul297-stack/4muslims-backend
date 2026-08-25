@@ -8,6 +8,7 @@ import {
   publishToFacebookVideo,
 } from "../services/socialpublisher.service.ts";
 import { generateVideoFromAudio } from "../services/video.service.ts";
+import { GeneratedVideo } from "../models/generatevideo.ts";
 export const updateAutoPostSettings = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
@@ -118,12 +119,29 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     );
 
     // 2. Generate video asset (.mp4)
-    const videoUrl = await generateVideoFromAudio({
+    const generatedVideo = await generateVideoFromAudio({
       audioUrl: quranData.audioUrl,
       arabicText: quranData.arabicText,
       translation: quranData.translation,
       surahName: quranData.surahName,
       ayahNumber: quranData.ayahNumber,
+    });
+    const videoUrl = generatedVideo.videoUrl;
+
+    await GeneratedVideo.create({
+      jobId: `autopost-${Date.now()}`,
+      userId: String(user._id),
+      templateId: generatedVideo.templateId,
+      surahNumber: quranData.surahNumber,
+      ayahNumber: quranData.ayahNumber,
+      reciterId: quranData.reciterId,
+      arabicText: quranData.arabicText,
+      translationText: quranData.translation,
+      audioUrl: quranData.audioUrl,
+      surahName: quranData.surahName,
+      status: "completed",
+      progress: 100,
+      outputUrl: videoUrl,
     });
 
     let postId: string | null = null;
