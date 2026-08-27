@@ -178,6 +178,24 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
     });
     const videoUrl = generatedVideo.videoUrl;
 
+    // Cap stored generated-video records per user at 5; evict the oldest first
+    const MAX_GENERATED_VIDEOS_PER_USER = 5;
+    const existingCount = await GeneratedVideo.countDocuments({
+      userId: String(user._id),
+    });
+    if (existingCount >= MAX_GENERATED_VIDEOS_PER_USER) {
+      const overflow = existingCount - MAX_GENERATED_VIDEOS_PER_USER + 1;
+      const oldestRecords = await GeneratedVideo.find({
+        userId: String(user._id),
+      })
+        .sort({ createdAt: 1 })
+        .limit(overflow)
+        .select("_id");
+      await GeneratedVideo.deleteMany({
+        _id: { $in: oldestRecords.map((record) => record._id) },
+      });
+    }
+
     await GeneratedVideo.create({
       jobId: `autopost-${Date.now()}`,
       userId: String(user._id),
