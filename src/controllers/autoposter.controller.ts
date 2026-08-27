@@ -9,6 +9,7 @@ import {
 } from "../services/socialpublisher.service.ts";
 import { generateVideoFromAudio } from "../services/video.service.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
+import { PLAN_CONFIGS } from "../config/plan.config.ts";
 export const updateAutoPostSettings = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
@@ -107,6 +108,55 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         message: "Automated posting is currently disabled in settings.",
+      });
+    }
+
+    // Enforce plan-based frequency/quota: FREE blocked, PRO 5/month, ULTIMATE daily up to plan cap
+    const plan =
+      (user.plan?.toUpperCase() as keyof typeof PLAN_CONFIGS) || "FREE";
+    const planConfig = PLAN_CONFIGS[plan] ?? PLAN_CONFIGS.FREE;
+
+    if (planConfig.autoPostLimit === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Automated posting is not available on the Free plan.",
+      });
+    }
+
+    const now = new Date();
+    const lastPostDate = autoPostSettings.lastAutoPostDate
+      ? new Date(autoPostSettings.lastAutoPostDate)
+      : null;
+
+    const alreadyPostedToday =
+      !!lastPostDate &&
+      lastPostDate.getUTCFullYear() === now.getUTCFullYear() &&
+      lastPostDate.getUTCMonth() === now.getUTCMonth() &&
+      lastPostDate.getUTCDate() === now.getUTCDate();
+
+    if (alreadyPostedToday) {
+      return res.status(429).json({
+        success: false,
+        message: "An automated post was already made today.",
+      });
+    }
+
+    // Reset the monthly counter once a new calendar month begins
+    const isNewMonth =
+      !lastPostDate ||
+      lastPostDate.getUTCFullYear() !== now.getUTCFullYear() ||
+      lastPostDate.getUTCMonth() !== now.getUTCMonth();
+    if (isNewMonth) {
+      autoPostSettings.monthlyAutoPostCount = 0;
+    }
+
+    if (
+      planConfig.autoPostLimit !== -1 &&
+      autoPostSettings.monthlyAutoPostCount >= planConfig.autoPostLimit
+    ) {
+      return res.status(429).json({
+        success: false,
+        message: `Monthly automated posting limit reached (${planConfig.autoPostLimit}). Upgrade your plan for more posts.`,
       });
     }
 

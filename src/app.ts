@@ -8,6 +8,7 @@ import VideoRoutes from "./routes/video-routes.ts";
 import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
 import "./workers/videoRender.worker.ts";
+import "./workers/autopostcron.worker.ts";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 6795;
