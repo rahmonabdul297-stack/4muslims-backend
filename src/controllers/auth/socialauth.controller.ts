@@ -218,17 +218,48 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
   try {
     // 1. Extract query parameters
-    const { code, state } = req.query as {
-      code?: string;
-      state?: string;
-    };
+    const { code, state, error, error_code, error_message, error_reason } =
+      req.query as {
+        code?: string;
+        state?: string;
+        error?: string;
+        error_code?: string;
+        error_message?: string;
+        error_reason?: string;
+      };
+
+    // Facebook redirects here with error params instead of code/state when the
+    // OAuth dialog itself failed (e.g. app domain/config issues on Meta's side)
+    if (error || error_code || error_message) {
+      const providerMessage =
+        error_message ||
+        error_reason ||
+        error ||
+        "Facebook rejected the connection request.";
+      console.error("Facebook OAuth provider error:", req.query);
+      if (isJsonClient) {
+        return res.status(400).json({
+          success: false,
+          message: providerMessage,
+          receivedQuery: req.query,
+        });
+      }
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(providerMessage)}`,
+      );
+    }
 
     if (!code || !state) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing code or state in query parameters.",
-        receivedQuery: req.query,
-      });
+      if (isJsonClient) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing code or state in query parameters.",
+          receivedQuery: req.query,
+        });
+      }
+      return res.redirect(
+        `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent("Missing code or state in Facebook callback.")}`,
+      );
     }
 
     const jwtSecret = process.env.JWT_USER_SECRET;
