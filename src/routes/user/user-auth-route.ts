@@ -46,6 +46,8 @@ import {
   getTikTokAuthUrl,
   tiktokCallback,
   youtubeCallback,
+  getGoogleAuthUrl,
+  googleCallback,
 } from "../../controllers/auth/socialauth.controller.ts";
 
 const router = Router();
@@ -107,6 +109,10 @@ router.put(
 router.get("/youtube/connect", verifyUserLoginToken, getYouTubeAuthUrl);
 router.get("/facebook/connect", verifyUserLoginToken, getFacebookAuthUrl);
 router.get("/tiktok/connect", verifyUserLoginToken, getTikTokAuthUrl);
+
+// Google sign-in (no prior session required — this is a login entrypoint)
+router.get("/google", getGoogleAuthUrl);
+router.get("/google/callback", googleCallback);
 
 // OAuth Callback Routes (Redirected from Provider)
 router.get("/youtube/callback", youtubeCallback);

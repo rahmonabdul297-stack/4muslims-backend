@@ -10,6 +10,13 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.YOUTUBE_REDIRECT_URI,
 );
 
+// Separate client for "Sign in with Google" — distinct scopes/redirect from the YouTube-connect feature above
+const googleLoginClient = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI,
+);
+
 // -------------------------------------------------------------
 // YOUTUBE OAUTH
 // -------------------------------------------------------------
@@ -405,6 +412,135 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
     return res.redirect(
       `${process.env.FRONTEND_URL}/dashboard?error=${encodeURIComponent(errorMessage)}`,
+    );
+  }
+};
+
+// -------------------------------------------------------------
+// GOOGLE LOGIN (regular user sign-in, not the YouTube-connect feature above)
+// -------------------------------------------------------------
+export const getGoogleAuthUrl = (req: Request, res: Response) => {
+  const jwtSecret = process.env.JWT_USER_SECRET;
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI?.trim();
+
+  if (!jwtSecret || !clientId || !clientSecret || !redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "Google sign-in is not configured on the server.",
+    });
+  }
+
+  // No user id yet at this point (this is a login entrypoint, not an authenticated "connect")
+  const state = jwt.sign({ purpose: "google_login" }, jwtSecret, {
+    expiresIn: "10m",
+  });
+
+  const url = googleLoginClient.generateAuthUrl({
+    access_type: "online",
+    prompt: "consent",
+    scope: ["openid", "email", "profile"],
+    state,
+  });
+
+  return res.redirect(url);
+};
+
+export const googleCallback = async (req: Request, res: Response) => {
+  try {
+    const { code, state } = req.query as { code?: string; state?: string };
+    if (!code || typeof state !== "string") {
+      throw new Error("Missing code or state from Google.");
+    }
+
+    const jwtSecret = process.env.JWT_USER_SECRET;
+    if (!jwtSecret) throw new Error("JWT_USER_SECRET is not configured.");
+
+    try {
+      const statePayload = jwt.verify(state, jwtSecret) as {
+        purpose?: string;
+      };
+      if (statePayload.purpose !== "google_login") {
+        throw new Error("Invalid state purpose.");
+      }
+    } catch {
+      throw new Error(
+        "Google sign-in request expired or is invalid. Please try again.",
+      );
+    }
+
+    const { tokens } = await googleLoginClient.getToken(code);
+    googleLoginClient.setCredentials(tokens);
+
+    const oauth2 = google.oauth2({ version: "v2", auth: googleLoginClient });
+    const { data: profile } = await oauth2.userinfo.get();
+
+    const email = profile.email?.toLowerCase();
+    if (!email) {
+      throw new Error(
+        "Google did not return an email address for this account.",
+      );
+    }
+    if (profile.verified_email === false) {
+      throw new Error("Your Google account's email address is not verified.");
+    }
+
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        name: profile.name || email.split("@")[0],
+        email,
+        authProvider: "google",
+        isVerified: true,
+        profileImage: profile.picture || undefined,
+      });
+    } else if (!user.isVerified) {
+      // Google already proved ownership of this email address
+      user.isVerified = true;
+      await user.save();
+    }
+
+    const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
+    if (!refreshTokenSecret) {
+      throw new Error("REFRESH_TOKEN_SECRET is not configured.");
+    }
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Session cookies mirror the email/password Login controller for consistency
+    const accessToken = jwt.sign({ id: user._id }, jwtSecret, {
+      expiresIn: "7d",
+    });
+    res.cookie(String(user._id), accessToken, {
+      path: "/",
+      expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+    });
+
+    const initialRefreshToken = jwt.sign(
+      { id: user._id, sessionType: "initial" },
+      refreshTokenSecret,
+      { expiresIn: "15m" },
+    );
+    res.cookie("refreshToken", initialRefreshToken, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProduction,
+      expires: new Date(Date.now() + 1000 * 60 * 15),
+    });
+
+    return res.redirect(`${process.env.FRONTEND_URL}/dashboard?login=google`);
+  } catch (error: any) {
+    const message =
+      error?.response?.data?.error_description ||
+      error.message ||
+      "Google sign-in failed.";
+    console.error("Google Login Error:", error?.response?.data || error);
+    return res.redirect(
+      `${process.env.FRONTEND_URL}/login?error=${encodeURIComponent(message)}`,
     );
   }
 };
