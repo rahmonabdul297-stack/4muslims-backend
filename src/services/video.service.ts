@@ -39,10 +39,12 @@ export const generateVideoFromAudio = async (
     throw new Error("CLOUD_NAME is missing in environment variables.");
   }
 
-  const templates = await Video.find({ isActive: true }).select({
-    _id: 1,
-    videoUrl: 1,
-  }).lean();
+  const templates = await Video.find({ isActive: true })
+    .select({
+      _id: 1,
+      videoUrl: 1,
+    })
+    .lean();
   const template = templates[Math.floor(Math.random() * templates.length)];
   const backgroundUrl = template?.videoUrl;
 

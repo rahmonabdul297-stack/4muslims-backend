@@ -10,6 +10,7 @@ import {
   normalizeQuranAudioUrl,
 } from "../services/audioUrl.service.ts";
 import { findReciterConfig } from "../config/reciters.ts";
+import { validateRenderPayload } from "../middlewares/validatevideopayload.ts";
 
 const findTemplateVideo = async (templateId: string) => {
   const video = await Video.findById(templateId);
@@ -153,6 +154,18 @@ const generateCustomVideo = async (req: Request, res: Response) => {
 
     await validateUrlAccessible(audioUrl);
 
+    // Reject oversized text/audio before creating a DB record or queuing FFmpeg work
+    try {
+      await validateRenderPayload({
+        arabicText: resolvedArabicText,
+        translationText: resolvedTranslationText,
+        audioUrl,
+        maxDurationSeconds: planConfig.maxDurationSeconds,
+      });
+    } catch (validationError) {
+      return sendErrorResponse(res, (validationError as Error).message, 400);
+    }
+
     const generated = await GeneratedVideo.create({
       userId,
       templateId,
@@ -258,21 +271,36 @@ const generateCustomVideo = async (req: Request, res: Response) => {
 
 const getVideoStatus = async (req: Request, res: Response) => {
   const { jobId } = req.params;
+  const userId = (req as any).id;
   if (!jobId) {
     return sendErrorResponse(res, "jobId parameter is required", 400);
   }
 
-  const record = await GeneratedVideo.findOne({ jobId });
-  if (!record) {
-    return sendErrorResponse(res, "Video render job not found", 404);
-  }
+  try {
+    const record = await GeneratedVideo.findOne({ jobId });
+    if (!record) {
+      return sendErrorResponse(res, "Video render job not found", 404);
+    }
 
-  return res.status(200).json({
-    status: record.status,
-    progress: record.progress,
-    outputUrl: record.outputUrl,
-    errorMessage: record.errorMessage,
-  });
+    // Prevent one user from reading another user's job status/output
+    if (record.userId !== userId) {
+      return sendErrorResponse(
+        res,
+        "You're not authorized to view this job",
+        403,
+      );
+    }
+
+    return res.status(200).json({
+      status: record.status,
+      progress: record.progress,
+      outputUrl: record.outputUrl,
+      errorMessage: record.errorMessage,
+    });
+  } catch (error) {
+    console.error("getVideoStatus error:", (error as Error).message);
+    return sendErrorResponse(res, "Failed to fetch video status", 500);
+  }
 };
 const generatedVideoHistory = async (req: Request, res: Response) => {
   const userId = (req as any).id;
@@ -282,11 +310,14 @@ const generatedVideoHistory = async (req: Request, res: Response) => {
   try {
     const history = await GeneratedVideo.find({
       userId: userId,
-    });
-    if (!history || history.length === 0) {
-      return sendErrorResponse(res, "No Generated video found!");
-    }
-    return sendSuccessResponse(res, "history successfully fetched", history);
+    }).sort({ createdAt: -1 });
+    // An empty history is a valid state, not an error
+    return sendSuccessResponse(
+      res,
+      "history successfully fetched",
+      history,
+      history.length,
+    );
   } catch (error) {
     console.log((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);

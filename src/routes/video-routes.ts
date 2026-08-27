@@ -20,7 +20,7 @@ router.post(
   enforcePlanLimits(false),
   generateCustomVideo,
 );
-router.get("/status/:jobId", getVideoStatus);
+router.get("/status/:jobId", verifyUserLoginToken, getVideoStatus);
 router.get("/history", verifyUserLoginToken, generatedVideoHistory);
 
 router.put(

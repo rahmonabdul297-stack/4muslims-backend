@@ -26,7 +26,7 @@ export interface UserTypes extends Document {
     videosGenerated: number;
     lastResetDate: Date;
     manualGenerationsCount: number; // Added
-    autoGenerationsCount: number;   // Added
+    autoGenerationsCount: number; // Added
   };
   socialProfiles?: {
     youtube?: string;
@@ -45,6 +45,7 @@ export interface UserTypes extends Document {
     facebook?: {
       accessToken: string;
       pageId: string;
+      expiresAt?: Date | null;
     };
   };
   autoPostSettings: AutoPostSettings;
@@ -82,7 +83,7 @@ const userSchema = new Schema<UserTypes>(
       videosGenerated: { type: Number, default: 0 },
       lastResetDate: { type: Date, default: Date.now },
       manualGenerationsCount: { type: Number, default: 0 }, // Added
-      autoGenerationsCount: { type: Number, default: 0 },   // Added
+      autoGenerationsCount: { type: Number, default: 0 }, // Added
     },
     socialProfiles: {
       youtube: { type: String, default: "" },
@@ -101,6 +102,7 @@ const userSchema = new Schema<UserTypes>(
       facebook: {
         accessToken: { type: String, default: null },
         pageId: { type: String, default: null },
+        expiresAt: { type: Date, default: null },
       },
     },
     autoPostSettings: {

@@ -186,9 +186,27 @@ export const tiktokCallback = async (req: Request, res: Response) => {
 
 export const getFacebookAuthUrl = (req: Request, res: Response) => {
   const userId = (req as any).id;
+  const jwtSecret = process.env.JWT_USER_SECRET;
+  const appId = process.env.FACEBOOK_APP_ID?.trim();
+  const redirectUri = process.env.FACEBOOK_REDIRECT_URI?.trim();
+
+  if (!jwtSecret || !appId || !redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "Facebook OAuth is not configured on the server.",
+    });
+  }
+
+  // Signed state prevents forging a callback that links a Page to another user's account
+  const state = jwt.sign(
+    { id: userId, purpose: "facebook_connect" },
+    jwtSecret,
+    { expiresIn: "10m" },
+  );
+
   const scope =
     "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,pages_read_user_content";
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${process.env.FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(process.env.FACEBOOK_REDIRECT_URI!)}&scope=${scope}&state=${userId}`;
+  const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${scope}&state=${encodeURIComponent(state)}`;
   return res.status(200).json({ success: true, url });
 };
 
@@ -200,18 +218,37 @@ export const facebookCallback = async (req: Request, res: Response) => {
 
   try {
     // 1. Extract query parameters
-    const { code, state: userId } = req.query as {
+    const { code, state } = req.query as {
       code?: string;
       state?: string;
     };
 
-    if (!code || !userId) {
+    if (!code || !state) {
       return res.status(400).json({
         success: false,
-        message: "Missing code or state (userId) in query parameters.",
+        message: "Missing code or state in query parameters.",
         receivedQuery: req.query,
       });
     }
+
+    const jwtSecret = process.env.JWT_USER_SECRET;
+    if (!jwtSecret) throw new Error("JWT_USER_SECRET is not configured.");
+
+    let statePayload: { id?: string; purpose?: string };
+    try {
+      statePayload = jwt.verify(state, jwtSecret) as {
+        id?: string;
+        purpose?: string;
+      };
+    } catch {
+      throw new Error(
+        "Facebook connection request expired or is invalid. Please try connecting again.",
+      );
+    }
+    if (!statePayload.id || statePayload.purpose !== "facebook_connect") {
+      throw new Error("Invalid Facebook OAuth state.");
+    }
+    const userId = statePayload.id;
 
     // 2. Exchange authorization code for short-lived token
     const tokenRes = await axios.get(
@@ -246,7 +283,17 @@ export const facebookCallback = async (req: Request, res: Response) => {
       },
     );
 
-    const longLivedToken = longLivedRes.data?.access_token || shortLivedToken;
+    const longLivedToken = longLivedRes.data?.access_token;
+    const longLivedExpiresIn = longLivedRes.data?.expires_in as
+      | number
+      | undefined;
+    if (!longLivedToken) {
+      // Falling back to the short-lived token here would silently produce a
+      // Page token that dies within ~1-2 hours instead of ~60 days.
+      throw new Error(
+        "Failed to exchange Facebook token for a long-lived session. Please try reconnecting.",
+      );
+    }
 
     // 4. Fetch Pages and Page Access Token
     const pagesRes = await axios.get(
@@ -275,6 +322,11 @@ export const facebookCallback = async (req: Request, res: Response) => {
     }
 
     const finalAccessToken = page.access_token;
+    // Page tokens derived from a long-lived User token are generally long-lived
+    // themselves; store an estimate so callers can proactively detect staleness.
+    const expiresAt = longLivedExpiresIn
+      ? new Date(Date.now() + longLivedExpiresIn * 1000)
+      : null;
 
     // 5. Save tokens to database
     const updatedUser = await User.findByIdAndUpdate(
@@ -283,6 +335,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
         $set: {
           "socialTokens.facebook.accessToken": finalAccessToken,
           "socialTokens.facebook.pageId": page.id,
+          "socialTokens.facebook.expiresAt": expiresAt,
           "socialProfiles.facebook": `https://facebook.com/${page.id}`,
         },
       },

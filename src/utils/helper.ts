@@ -225,8 +225,8 @@ export const requirePremium = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const user = (req as any).id;
-    if (!user) {
+    const userId = (req as any).id;
+    if (!userId) {
       res.status(401).json({
         success: false,
         message: "Unauthorized: User authentication required.",
@@ -234,24 +234,37 @@ export const requirePremium = async (
       return;
     }
 
-    if (user.isPremium === false) {
-      res.status(403).json({
+    // Premium status lives on the User document (plan/premiumExpiresAt), not on the JWT id string
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(401).json({
         success: false,
-        message: "Forbidden: This feature requires a Premium subscription.",
+        message: "Unauthorized: User account no longer exists.",
       });
       return;
     }
 
-    if (user.premiumExpiresAt && new Date(user.premiumExpiresAt) < new Date()) {
-      user.isPremium = false;
+    const isExpired =
+      !!user.premiumExpiresAt && new Date(user.premiumExpiresAt) < new Date();
+
+    if (isExpired && user.plan !== "FREE") {
+      user.plan = "FREE";
+      user.premiumExpiresAt = null;
       await user.save();
+    }
 
+    const isPremiumPlan = user.plan === "PRO" || user.plan === "ULTIMATE";
+    if (!isPremiumPlan || isExpired) {
       res.status(403).json({
         success: false,
-        message: "Forbidden: Your Premium subscription has expired.",
+        message: isExpired
+          ? "Forbidden: Your Premium subscription has expired."
+          : "Forbidden: This feature requires a Premium subscription.",
       });
       return;
     }
+
+    (req as any).userInstance = user;
     next();
   } catch (error) {
     next(error);

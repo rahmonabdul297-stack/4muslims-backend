@@ -58,16 +58,21 @@ export const validateRenderPayload = async ({
   maxTranslationChars = 750,
   maxDurationSeconds = 120, // 2 minutes max length
 }: ValidationParams): Promise<{ valid: true; duration: number }> => {
+  // Guard against missing/non-string text so .length below can't throw a raw TypeError
+  const safeArabicText = typeof arabicText === "string" ? arabicText : "";
+  const safeTranslationText =
+    typeof translationText === "string" ? translationText : "";
+
   // 1. Character Length Checks
-  if (arabicText.length > maxArabicChars) {
+  if (safeArabicText.length > maxArabicChars) {
     throw new Error(
-      `Arabic text is too long (${arabicText.length} chars). Maximum allowed is ${maxArabicChars} chars to prevent excessive video size.`,
+      `Arabic text is too long (${safeArabicText.length} chars). Maximum allowed is ${maxArabicChars} chars to prevent excessive video size.`,
     );
   }
 
-  if (translationText.length > maxTranslationChars) {
+  if (safeTranslationText.length > maxTranslationChars) {
     throw new Error(
-      `Translation text is too long (${translationText.length} chars). Maximum allowed is ${maxTranslationChars} chars to prevent excessive video size.`,
+      `Translation text is too long (${safeTranslationText.length} chars). Maximum allowed is ${maxTranslationChars} chars to prevent excessive video size.`,
     );
   }
 
