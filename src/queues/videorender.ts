@@ -1,22 +1,27 @@
-// src/queues/videoRender.queue.ts
-import { Queue } from "bullmq";
-import { redisConnection } from "../redis.ts";
-import type { VideoRenderJobData } from "../types/redis.types.ts";
+// src/queues/videorender.ts
+import { Agenda } from "agenda";
+import { MongoBackend } from "@agendajs/mongo-backend";
+import type { VideoRenderJobData } from "../types/videoRenderJob.types.ts";
 
-export const VIDEO_RENDER_QUEUE = "video-render-queue";
+export const VIDEO_RENDER_JOB = "render-video";
 
-export const videoRenderQueue = new Queue<VideoRenderJobData>(
-  VIDEO_RENDER_QUEUE,
-  {
-    connection: redisConnection,
-    defaultJobOptions: {
-      attempts: 3,
-      backoff: {
-        type: "exponential",
-        delay: 5000,
-      },
-      removeOnComplete: { age: 86400 }, // Keep completed jobs for 24 hrs
-      removeOnFail: { age: 604800 }, // Keep failed jobs for 7 days
-    },
-  },
-);
+const mongoURI = process.env.LIVE_MONGODB_URI;
+if (!mongoURI) {
+  throw new Error("LIVE_MONGODB_URI is not configured; Agenda cannot start.");
+}
+
+// Agenda persists jobs as documents in this Mongo collection instead of Redis
+export const agenda = new Agenda({
+  backend: new MongoBackend({
+    address: mongoURI,
+    collection: "videoRenderJobs",
+  }),
+  processEvery: "5 seconds",
+  maxConcurrency: 1,
+});
+
+agenda.on("error", (error: Error) => {
+  console.error("Agenda connection error:", error);
+});
+
+export type { VideoRenderJobData };

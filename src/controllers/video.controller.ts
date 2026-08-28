@@ -3,7 +3,7 @@ import axios from "axios";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 import { Video } from "../models/videotemp.ts";
-import { videoRenderQueue } from "../queues/videorender.ts";
+import { agenda, VIDEO_RENDER_JOB } from "../queues/videorender.ts";
 import {
   buildQuranAudioUrl,
   getGlobalAyahNumber,
@@ -186,7 +186,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
     let job;
     try {
       // Queue rendering job with plan settings passed through
-      job = await videoRenderQueue.add("render-video", {
+      job = await agenda.now(VIDEO_RENDER_JOB, {
         mongoRenderId: generated._id.toString(),
         userId,
         templateId,
@@ -199,7 +199,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         globalAyahNumber,
         surahName,
         reciterId,
-        // Pass plan enforcement properties to the BullMQ worker / FFmpeg process
+        // Pass plan enforcement properties to the Agenda worker / FFmpeg process
         planConfig: {
           hasWatermark: planConfig.hasWatermark,
           preset: planConfig.preset,
@@ -226,13 +226,13 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       );
     }
 
-    if (!job?.id) {
+    if (!job?.attrs?._id) {
       await GeneratedVideo.findByIdAndDelete(generated._id);
       return sendErrorResponse(res, "Failed to dispatch rendering job.", 500);
     }
 
     // Save job ID and increment the user's manual generations count
-    generated.jobId = job.id;
+    generated.jobId = String(job.attrs._id);
     await generated.save();
 
     user.monthlyUsage.manualGenerationsCount += 1;
@@ -242,7 +242,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       success: true,
       message: "Video rendering task queued successfully",
       data: {
-        jobId: job.id,
+        jobId: String(job.attrs._id),
         renderId: generated._id,
         status: "pending",
         usage: {

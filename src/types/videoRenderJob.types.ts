@@ -12,7 +12,6 @@ export interface VideoRenderJobData {
   surahName?: string;
   reciterId: string;
 
-  // Add the planConfig property to the interface
   planConfig: {
     hasWatermark: boolean;
     preset: "ultrafast" | "faster" | "medium";
