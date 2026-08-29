@@ -4,20 +4,13 @@ import path from "path";
 // 1. Initialize environment variables FIRST before loading DB modules
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-import fs from "fs";
 import type { Job } from "agenda";
 import { exponential } from "agenda";
 import type { VideoRenderJobData } from "../types/videoRenderJob.types.ts";
 import { agenda, VIDEO_RENDER_JOB } from "../queues/videorender.ts";
 import { findReciterConfig } from "../config/reciters.ts";
 import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
-
-const clearTempDir = async (jobId: string) => {
-  const dir = path.join(process.cwd(), "tmp", jobId);
-  if (fs.existsSync(dir)) {
-    await fs.promises.rm(dir, { recursive: true, force: true });
-  }
-};
+import { clearJobTempDir } from "../utils/tempDir.ts";
 
 const initWorker = async () => {
   // 2. Dynamically import DB and Models AFTER dotenv has populated process.env
@@ -126,11 +119,12 @@ const initWorker = async () => {
         );
         throw error;
       } finally {
-        await clearTempDir(jobId);
+        // renderQuranOverlay already cleans up its own scratch dir; this is a safety net
+        await clearJobTempDir(jobId);
       }
     },
     {
-      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 1800000, // 30 minutes for Replicate rendering
+      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 1800000, // 30 minutes for local ffmpeg rendering
       concurrency: 1,
       backoff: exponential({ delay: 10000, maxRetries: 1 }), // 1 retry = 2 total attempts (long jobs shouldn't retry)
     },

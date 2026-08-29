@@ -14,25 +14,17 @@ export const toDownloadUrl = (url: string): string => {
     return url;
   }
 
-  // Insert attachment flag into transformation chain
-  // Pattern: /upload/v{version}/{transformations}/file.ext
-  // Target: /upload/{transformations},fl_attachment/file.ext
-  const uploadIndex = url.indexOf("/upload/");
+  // fl_attachment must be its own path segment, inserted before the version/public_id
+  // segment — never comma-merged onto "v{version}" (that produces an invalid URL).
+  const uploadMarker = "/upload/";
+  const uploadIndex = url.indexOf(uploadMarker);
   if (uploadIndex === -1) {
     // Not a Cloudinary URL, return as-is
     return url;
   }
 
-  const afterUpload = uploadIndex + "/upload/".length;
-  const nextSlash = url.indexOf("/", afterUpload);
-
-  if (nextSlash === -1) {
-    // No version/transformation, append directly
-    return `${url.substring(0, afterUpload)}fl_attachment/${url.substring(afterUpload)}`;
-  }
-
-  // Insert before the resource path
-  return `${url.substring(0, nextSlash)},fl_attachment${url.substring(nextSlash)}`;
+  const insertAt = uploadIndex + uploadMarker.length;
+  return `${url.slice(0, insertAt)}fl_attachment/${url.slice(insertAt)}`;
 };
 
 /**

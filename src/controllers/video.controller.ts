@@ -11,6 +11,7 @@ import {
 } from "../services/audioUrl.service.ts";
 import { findReciterConfig } from "../config/reciters.ts";
 import { validateRenderPayload } from "../middlewares/validatevideopayload.ts";
+import { toDownloadUrl } from "../utils/cloudinaryHelper.ts";
 
 const findTemplateVideo = async (templateId: string) => {
   const video = await Video.findById(templateId);
@@ -294,7 +295,10 @@ const getVideoStatus = async (req: Request, res: Response) => {
     return res.status(200).json({
       status: record.status,
       progress: record.progress,
-      outputUrl: record.outputUrl,
+      // Force a download instead of inline playback for the human-facing response only
+      outputUrl: record.outputUrl
+        ? toDownloadUrl(record.outputUrl)
+        : record.outputUrl,
       errorMessage: record.errorMessage,
     });
   } catch (error) {
@@ -310,13 +314,24 @@ const generatedVideoHistory = async (req: Request, res: Response) => {
   try {
     const history = await GeneratedVideo.find({
       userId: userId,
-    }).sort({ createdAt: -1 });
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Force downloads for the human-facing history list only
+    const historyWithDownloadUrls = history.map((record) => ({
+      ...record,
+      outputUrl: record.outputUrl
+        ? toDownloadUrl(record.outputUrl)
+        : record.outputUrl,
+    }));
+
     // An empty history is a valid state, not an error
     return sendSuccessResponse(
       res,
       "history successfully fetched",
-      history,
-      history.length,
+      historyWithDownloadUrls,
+      historyWithDownloadUrls.length,
     );
   } catch (error) {
     console.log((error as Error).message);

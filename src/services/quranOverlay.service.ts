@@ -1,12 +1,16 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-import axios from "axios";
+import fs from "fs";
+import path from "path";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
-import Replicate from "replicate";
-import { toDownloadUrl } from "../utils/cloudinaryHelper.ts";
+import ffmpeg from "fluent-ffmpeg";
+import ffmpegStaticPath from "ffmpeg-static";
+import { parseFile } from "music-metadata";
+import { downloadFileToPath } from "../utils/downloadFile.ts";
+import { ensureJobTempDir } from "../utils/tempDir.ts";
 
 const ensureCloudinaryConfig = () => {
   const cloudName = process.env.CLOUD_NAME?.trim();
@@ -28,17 +32,15 @@ const ensureCloudinaryConfig = () => {
   });
 };
 
-const getReplicateToken = () => {
-  const apiToken = process.env.REPLICATE_API_TOKEN?.trim();
-  if (!apiToken) {
-    throw new Error(
-      "Replicate API token missing: REPLICATE_API_TOKEN must be set.",
-    );
-  }
-  return apiToken;
-};
-
 ensureCloudinaryConfig();
+
+if (ffmpegStaticPath) {
+  ffmpeg.setFfmpegPath(ffmpegStaticPath);
+} else {
+  console.warn(
+    "[quranOverlay] ffmpeg-static did not resolve a binary path; relying on system ffmpeg.",
+  );
+}
 
 const bidi = bidiFactory();
 
@@ -51,99 +53,135 @@ export const shapeArabicText = (text: string): string => {
 };
 
 /**
- * Upload video to Cloudinary and return URL (not public_id)
+ * Strip ASS override-tag delimiters from user text so recitation/translation
+ * content can never inject subtitle filter syntax.
  */
-const getVideoUrl = async (videoUrl: string): Promise<string> => {
-  // If already a URL, return it; if local file, upload to Cloudinary
-  if (videoUrl.startsWith("http")) {
-    return videoUrl;
-  }
+const escapeAssText = (text: string): string => {
+  return (text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/[{}]/g, "")
+    .replace(/\r?\n/g, "\\N");
+};
 
-  // Local file upload (not typical in our flow, but support it)
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload(
-      videoUrl,
-      { resource_type: "video", folder: "quran_generated_videos" },
-      (error, result) => {
-        if (error) return reject(error);
-        if (!result?.secure_url) {
-          return reject(new Error("Cloudinary upload failed"));
-        }
-        resolve(result.secure_url);
-      },
-    );
-  });
+/** Escape a filesystem path for use inside the ffmpeg `subtitles=` filter argument. */
+const escapeSubtitlesFilterPath = (filePath: string): string => {
+  return filePath.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
+};
+
+const formatAssTime = (seconds: number): string => {
+  const clamped = Math.max(0, seconds);
+  const hours = Math.floor(clamped / 3600);
+  const mins = Math.floor((clamped % 3600) / 60);
+  const secs = Math.floor(clamped % 60);
+  const centis = Math.floor((clamped % 1) * 100);
+  return `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
 };
 
 /**
- * Generate SRT subtitle file content with full text displayed together
- * Arabic text displays at top (white), translation at bottom (light gray)
- * Both visible for entire audio duration
+ * Build an ASS subtitle track with the Arabic ayah and its translation stacked
+ * together (one line break apart) anchored in the lower-middle of the frame.
  */
-const generateSrtContent = (
+const generateAssContent = (
   arabicText: string,
   translationText: string,
   totalDurationSeconds: number,
 ): string => {
-  // Format time for SRT (HH:MM:SS,mmm)
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    const millis = Math.floor((seconds % 1) * 1000);
-    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
-  };
+  const shapedArabic = escapeAssText(shapeArabicText(arabicText));
+  const escapedTranslation = escapeAssText(translationText);
+  const end = formatAssTime(totalDurationSeconds + 1);
+  const text = `{\\c&H00FFFFFF&}{\\fs64}{\\b1}${shapedArabic}{\\r}\\N{\\c&H00E0E0E0&}{\\fs40}${escapedTranslation}`;
 
-  // Shape Arabic text for proper RTL display
-  const shapedArabic = arabicText ? shapeArabicText(arabicText) : "";
+  return `[Script Info]
+Title: Quran Overlay
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+ScaledBorderAndShadow: yes
 
-  // Add small buffer to ensure subtitle covers entire audio
-  const startTime = 0;
-  const endTime = Math.ceil(totalDurationSeconds) + 1;
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Overlay,Arial,40,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,220,1
 
-  // SRT format: index, timecode, text, blank line
-  // Using ASS-style tags that FFmpeg subtitles filter will parse
-  let srtContent = "";
-  srtContent += "1\n"; // Index
-  srtContent += `${formatTime(startTime)} --> ${formatTime(endTime)}\n`; // Timecode
-
-  // Text with styling tags for FFmpeg subtitles filter
-  // Format: {tag}text
-  // White color for Arabic, light gray for translation
-  srtContent += `{\\c&HFFFFFF&}{\\fs50}{\\b1}${shapedArabic}\\n\\n{\\c&HE0E0E0&}{\\fs32}${translationText}{\\r}\n\n`;
-
-  return srtContent;
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,${end},Overlay,,0,0,0,,${text}
+`;
 };
 
-/**
- * Get audio duration from URL
- */
-const getAudioDuration = async (audioUrl: string): Promise<number> => {
-  try {
-    const response = await axios.get(audioUrl, {
-      responseType: "arraybuffer",
-      timeout: 30000,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-    });
-
-    const buffer = Buffer.from(response.data);
-    const { parseBuffer } = await import("music-metadata");
-    const metadata = await parseBuffer(buffer, "audio/mpeg");
-    const duration = metadata.format?.duration;
-
-    if (!duration || isNaN(duration)) {
-      throw new Error("Could not determine audio duration");
-    }
-
-    return duration;
-  } catch (error) {
-    throw new Error(
-      `Failed to get audio duration: ${(error as Error).message}`,
-    );
+const getAudioDurationFromFile = async (filePath: string): Promise<number> => {
+  const metadata = await parseFile(filePath);
+  const duration = metadata.format?.duration;
+  if (!duration || isNaN(duration)) {
+    throw new Error("Could not determine audio duration from downloaded file");
   }
+  return duration;
+};
+
+interface RunFfmpegParams {
+  videoPath: string;
+  audioPath: string;
+  assPath: string;
+  outputPath: string;
+  audioDurationSeconds: number;
+  onProgress?: (progress: number) => void;
+}
+
+/**
+ * Merge the (looped) template video, the recitation audio and the ASS subtitle
+ * track into a single mp4 using a local ffmpeg binary — no Replicate, no Redis.
+ */
+const runFfmpegRender = ({
+  videoPath,
+  audioPath,
+  assPath,
+  outputPath,
+  audioDurationSeconds,
+  onProgress,
+}: RunFfmpegParams): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const escapedAssPath = escapeSubtitlesFilterPath(assPath);
+
+    ffmpeg()
+      .input(videoPath)
+      .inputOptions(["-stream_loop", "-1"])
+      .input(audioPath)
+      .complexFilter([`[0:v]scale=1920:-2,subtitles='${escapedAssPath}'[vout]`])
+      .outputOptions([
+        "-map",
+        "[vout]",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-shortest",
+        "-y",
+      ])
+      .duration(audioDurationSeconds)
+      .on("progress", (progress) => {
+        if (onProgress && typeof progress.percent === "number") {
+          const scaled = 35 + Math.min(50, (progress.percent / 100) * 50);
+          onProgress(Math.round(scaled));
+        }
+      })
+      .on("error", (err: Error, _stdout, stderr) => {
+        console.error("[quranOverlay] FFmpeg error:", err.message);
+        if (stderr) console.error("[quranOverlay] FFmpeg stderr:", stderr);
+        reject(new Error(`FFmpeg rendering failed: ${err.message}`));
+      })
+      .on("end", () => resolve())
+      .save(outputPath);
+  });
 };
 
 export interface OverlayRenderParams {
@@ -159,197 +197,89 @@ export interface OverlayRenderParams {
 }
 
 /**
- * Render Quran overlay using Replicate's FFmpeg model
- * Properly merges video + audio + animated text overlays as one complete video file
+ * Render Quran overlay using a local ffmpeg binary in job-scoped scratch space.
+ * Inputs are downloaded to tmp/<jobId>, rendered, uploaded to Cloudinary, then
+ * the scratch directory is deleted — nothing persists on local disk afterward.
  */
 export const renderQuranOverlay = async ({
   jobId,
   videoUrl,
   audioUrl,
-  surahNumber,
-  ayahNumber,
   arabicText,
   translationText,
-  surahName,
   onProgress,
 }: OverlayRenderParams): Promise<{
   outputUrl: string;
   cloudinaryPublicId: string;
 }> => {
-  const apiToken = getReplicateToken();
-  const replicate = new Replicate({
-    auth: apiToken,
-  });
+  const tempDir = await ensureJobTempDir(jobId);
+  const safeJobId = path.basename(tempDir);
+
+  const videoPath = path.join(tempDir, "input_video.mp4");
+  const audioPath = path.join(tempDir, "input_audio.mp3");
+  const assPath = path.join(tempDir, "subtitles.ass");
+  const outputPath = path.join(tempDir, "output.mp4");
 
   try {
-    if (onProgress) await Promise.resolve(onProgress(10));
+    if (onProgress) await Promise.resolve(onProgress(5));
 
-    // Step 1: Get URLs and audio duration
-    const finalVideoUrl = await getVideoUrl(videoUrl);
-    const audioDuration = await getAudioDuration(audioUrl);
+    // Step 1: Pull the template video and recitation audio into scratch space
+    await Promise.all([
+      downloadFileToPath(videoUrl, videoPath),
+      downloadFileToPath(audioUrl, audioPath),
+    ]);
 
     if (onProgress) await Promise.resolve(onProgress(20));
 
-    // Step 2: Generate SRT subtitle file with timed text overlays
-    const srtContent = generateSrtContent(
+    // Step 2: Determine audio duration from the downloaded file (no re-fetch)
+    const audioDuration = await getAudioDurationFromFile(audioPath);
+
+    if (onProgress) await Promise.resolve(onProgress(25));
+
+    // Step 3: Write the ASS subtitle track (Arabic top, translation bottom)
+    const assContent = generateAssContent(
       arabicText,
       translationText,
       audioDuration,
     );
+    await fs.promises.writeFile(assPath, assContent, "utf-8");
 
     if (onProgress) await Promise.resolve(onProgress(30));
 
-    // Step 3: Upload SRT to Cloudinary for access by FFmpeg
-    const srtUrl = await new Promise<string>((resolve, reject) => {
-      cloudinary.uploader.upload(
-        `data:text/plain;base64,${Buffer.from(srtContent).toString("base64")}`,
-        {
-          resource_type: "raw",
-          format: "srt",
-          public_id: `subtitles_${jobId}`,
-          folder: "quran_subtitles",
-          overwrite: true,
-        },
-        (error, result) => {
-          if (error) {
-            return reject(new Error(`SRT upload failed: ${error.message}`));
-          }
-          if (!result) {
-            return reject(
-              new Error("SRT upload returned empty result from Cloudinary"),
-            );
-          }
-          if (!result.secure_url) {
-            return reject(
-              new Error(
-                `SRT upload missing secure_url: ${JSON.stringify(result)}`,
-              ),
-            );
-          }
-          resolve(result.secure_url);
-        },
-      );
+    // Step 4: Render with local ffmpeg (loops video to cover full audio length)
+    console.log(`[quranOverlay] Rendering job ${safeJobId} with local ffmpeg`);
+    await runFfmpegRender({
+      videoPath,
+      audioPath,
+      assPath,
+      outputPath,
+      audioDurationSeconds: audioDuration,
+      onProgress: (p) => {
+        if (onProgress) Promise.resolve(onProgress(p)).catch(() => {});
+      },
     });
-
-    if (onProgress) await Promise.resolve(onProgress(40));
-
-    // Step 4: Call Replicate's FFmpeg model to render video with audio and subtitles
-    console.log(`[quranOverlay] Calling Replicate FFmpeg for job ${jobId}`);
-    console.log(`  Video: ${finalVideoUrl}`);
-    console.log(`  Audio: ${audioUrl}`);
-    console.log(`  Duration: ${audioDuration}s`);
-
-    // Use Replicate's FFmpeg model to merge video + audio + subtitles
-    // This takes 5-10 minutes depending on video length
-    let output: any;
-    try {
-      // FFmpeg filter complex:
-      // 1. Scale video to 1920x1080 (maintains aspect ratio, -2 ensures even pixels)
-      // 2. Apply subtitles from SRT file with styling
-      // 3. Output labeled streams for muxing
-      // Audio is automatically included from the audio input
-      const filterComplex =
-        "[0:v]scale=1920:-2,subtitles=[subtitle]:force_style='FontName=Arial,FontSize=50,FontColor=&HFFFFFF&,BorderStyle=3,OutlineColor=&H000000&,Outline=2'[vout]";
-
-      console.log(`[quranOverlay] FFmpeg filter: ${filterComplex}`);
-
-      output = (await replicate.run("lucataco/ffmpeg:0e38e9e0", {
-        input: {
-          video: finalVideoUrl,
-          audio: audioUrl,
-          subtitle: srtUrl,
-          filter_complex: filterComplex,
-          output_format: "mp4",
-          output_vcodec: "h264",
-          output_acodec: "aac",
-          output_bitrate: "5M",
-          audio_bitrate: "192k", // Ensure audio is included with proper quality
-        },
-      })) as any;
-    } catch (replicateError) {
-      // Log detailed error for debugging
-      console.error(`[quranOverlay] Replicate error for job ${jobId}:`, {
-        message: (replicateError as Error).message,
-        error: replicateError,
-      });
-      throw replicateError;
-    }
-
-    if (onProgress) await Promise.resolve(onProgress(70));
-
-    // Step 5: Validate and process Replicate output
-    let finalUrl: string;
-    let publicId: string;
-
-    if (typeof output === "string") {
-      // Output is a URL string
-      finalUrl = output;
-      publicId = `quran_video_${jobId}`;
-    } else if (Array.isArray(output) && output[0]) {
-      // Output is an array with URL as first element
-      finalUrl = output[0];
-      publicId = `quran_video_${jobId}`;
-    } else {
-      console.error(
-        `[quranOverlay] Unexpected Replicate output format:`,
-        output,
-      );
-      throw new Error(
-        `Unexpected output format from Replicate. Expected string or array, got: ${typeof output}`,
-      );
-    }
-
-    // Validate that the URL is an actual video file, not a Cloudinary transformation
-    if (
-      !finalUrl.includes(".mp4") &&
-      !finalUrl.includes(".webm") &&
-      !finalUrl.includes(".mov")
-    ) {
-      console.error(
-        `[quranOverlay] Output URL doesn't appear to be a video file:`,
-        finalUrl,
-      );
-      console.error(`[quranOverlay] Replicate full output was:`, output);
-      throw new Error(
-        `Replicate output is not a video file. URL: ${finalUrl}. Check Replicate model output.`,
-      );
-    }
-
-    console.log(
-      `[quranOverlay] Replicate successfully rendered video for job ${jobId}`,
-    );
-    console.log(`  Rendered URL: ${finalUrl}`);
-    console.log(
-      `  URL is video file: ${finalUrl.includes(".mp4") || finalUrl.includes(".webm") || finalUrl.includes(".mov")}`,
-    );
 
     if (onProgress) await Promise.resolve(onProgress(85));
 
-    // Step 6: Upload output to Cloudinary for permanent storage
+    // Step 5: Upload the rendered file to Cloudinary for permanent storage
+    const publicId = `quran_video_${safeJobId}`;
     console.log(`[quranOverlay] Uploading rendered video to Cloudinary...`);
     console.log(`  Public ID: ${publicId}`);
-    console.log(`  Resource Type: video`);
-    console.log(`  Folder: quran_generated_videos`);
 
-    // Upload to Cloudinary for permanent storage
     const uploadResult = await new Promise<any>((resolve, reject) => {
-      cloudinary.uploader.upload(
-        finalUrl,
+      cloudinary.uploader.upload_large(
+        outputPath,
         {
           resource_type: "video",
           public_id: publicId,
           folder: "quran_generated_videos",
           overwrite: true,
-          timeout: 600000, // 10 minutes for upload
-          // Explicitly set eager transformations off to prevent auto-transformations
+          chunk_size: 6000000,
+          timeout: 600000,
           eager: [],
         },
         (error, result) => {
           if (error) {
-            console.error(`[quranOverlay] Cloudinary upload error:`, {
-              error: error.message,
-              public_id: publicId,
-            });
             return reject(
               new Error(`Cloudinary video upload failed: ${error.message}`),
             );
@@ -376,25 +306,32 @@ export const renderQuranOverlay = async ({
       );
     });
 
-    if (onProgress) await Promise.resolve(onProgress(95));
-
-    console.log(`[quranOverlay] Rendered video for job ${jobId}`);
+    console.log(`[quranOverlay] Rendered video for job ${safeJobId}`);
     console.log(`  Output URL: ${uploadResult.secure_url}`);
     console.log(`  Public ID: ${uploadResult.public_id}`);
 
     if (onProgress) await Promise.resolve(onProgress(100));
 
-    // Convert to download URL to force browser download instead of playback
-    const downloadUrl = toDownloadUrl(uploadResult.secure_url);
-
+    // Keep the plain Cloudinary URL here — this value is also handed straight to
+    // social platform APIs (Facebook/YouTube/TikTok) to fetch the file server-side,
+    // and fl_attachment breaks their fetchers. Download-forcing is applied only
+    // when serving a URL to a human browser (see video.controller.ts).
     return {
-      outputUrl: downloadUrl,
+      outputUrl: uploadResult.secure_url,
       cloudinaryPublicId: uploadResult.public_id,
     };
   } catch (error) {
-    console.error(`[quranOverlay] Rendering failed for job ${jobId}:`, error);
+    console.error(
+      `[quranOverlay] Rendering failed for job ${safeJobId}:`,
+      error,
+    );
     throw new Error(
       `Quran overlay rendering failed: ${(error as Error).message}`,
     );
+  } finally {
+    // Scratch space only — always clean up regardless of caller (worker or autopost)
+    await fs.promises
+      .rm(tempDir, { recursive: true, force: true })
+      .catch(() => {});
   }
 };

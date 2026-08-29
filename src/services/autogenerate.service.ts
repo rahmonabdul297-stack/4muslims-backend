@@ -49,12 +49,13 @@ export const generateQuranContent = async (
     description = fullText.slice(0, 4000);
   } else if (targetPlatform === "facebook") {
     // Facebook: 3 key hashtags (avoids spam signals)
-    const hashtags = `#Quran #Islam #Surah${cleanSurah}`;
+    const hashtags = `#Quran #fyp #Islam #Surah${cleanSurah}`;
     description =
-      `Quranic Reflection: Surah ${surahName} [Verse ${ayahNumber}]\n\n` +
+      `🎧🥀🌹✨ Quranic Reflection: Surah ${surahName} [Verse ${ayahNumber}]\n\n` +
       `Arabic:\n${uthmaniText}\n\n` +
       `Translation:\n"${translationText}"\n\n` +
-      `May Allah grant us wisdom and peace through the Holy Quran.\n\n` +
+      `May Allah grant us wisdom and peace through the Holy Quran.🤲🤲\n\n` +
+      `Follow us you'll never regret it 🙏` +
       `${hashtags}`;
   } else if (targetPlatform === "youtube") {
     // YouTube: 4-5 high-performing hashtags (YouTube ignores descriptions with >60 hashtags)

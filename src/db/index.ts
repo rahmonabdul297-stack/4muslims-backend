@@ -1,14 +1,9 @@
 import mongoose from "mongoose";
 
-
 const connectDB = async (): Promise<void> => {
-    const mongoURI = process.env.LIVE_MONGODB_URI;
-  try {
-    const conns = await mongoose.connect(String(mongoURI));
-    console.log(`DB connected: host ${conns.connection.host}`);
-  } catch (error) {
-    console.error(`DB error: ${(error as Error).message}`);
-  }
+  const mongoURI = process.env.LIVE_MONGODB_URI;
+  const conns = await mongoose.connect(String(mongoURI));
+  console.log(`DB connected: host ${conns.connection.host}`);
 };
 
 export default connectDB;
