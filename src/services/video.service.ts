@@ -27,6 +27,7 @@ export interface GenerateVideoParams {
 export interface GeneratedVideoResult {
   videoUrl: string;
   templateId: string;
+  cloudinaryPublicId?: string;
 }
 
 export const generateVideoFromAudio = async (
@@ -54,7 +55,7 @@ export const generateVideoFromAudio = async (
     );
   }
 
-  const videoUrl = await renderQuranOverlay({
+  const renderResult = await renderQuranOverlay({
     jobId: `autopost-${Date.now()}`,
     videoUrl: backgroundUrl,
     audioUrl,
@@ -66,7 +67,8 @@ export const generateVideoFromAudio = async (
   });
 
   return {
-    videoUrl,
+    videoUrl: renderResult.outputUrl,
     templateId: String(template._id),
+    cloudinaryPublicId: renderResult.cloudinaryPublicId,
   };
 };

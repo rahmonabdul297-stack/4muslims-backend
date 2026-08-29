@@ -9,7 +9,7 @@ import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
 
 const app = express();
-const PORT = Number(process.env.PORT) || 6795;
+const PORT = 9998;
 
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -32,6 +32,7 @@ const startServer = async () => {
     // Import workers AFTER database is connected to prevent Agenda connection race
     await import("./workers/videoRender.worker.ts");
     await import("./workers/autopostcron.worker.ts");
+    await import("./workers/storageCleanup.worker.ts");
 
     app.listen(PORT, () => {
       console.log(`Server is up and running on http://localhost:${PORT}`);

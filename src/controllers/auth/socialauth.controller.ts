@@ -488,13 +488,26 @@ export const googleCallback = async (req: Request, res: Response) => {
 
     let user = await User.findOne({ email });
     if (!user) {
-      user = await User.create({
-        name: profile.name || email.split("@")[0],
+      // Ensure name is always a non-empty string
+      const userName =
+        profile.name && profile.name.trim()
+          ? profile.name.trim()
+          : email.split("@")[0];
+
+      // Prepare user creation payload with explicit checks
+      const userPayload: any = {
+        name: userName,
         email,
         authProvider: "google",
         isVerified: true,
-        profileImage: profile.picture || undefined,
-      });
+      };
+
+      // Only add optional fields if they have values
+      if (profile.picture) {
+        userPayload.profileImage = profile.picture;
+      }
+
+      user = await User.create(userPayload);
     } else if (!user.isVerified) {
       // Google already proved ownership of this email address
       user.isVerified = true;

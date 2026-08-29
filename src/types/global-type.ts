@@ -36,6 +36,8 @@ export interface GenerateVideoTypes {
   outputUrl: string; // final Cloudinary MP4 url, populated on completion
   errorMessage?: string;
   outputDurationSeconds?: number;
+  isAdminPosted?: boolean; // true if posted by admin; false/omitted = user-generated
+  cloudinaryPublicId?: string; // Cloudinary public ID for cleanup tracking
   createdAt?: Date;
   completedAt?: Date;
 }

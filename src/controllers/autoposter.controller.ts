@@ -128,18 +128,18 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
       ? new Date(autoPostSettings.lastAutoPostDate)
       : null;
 
-    const alreadyPostedToday =
-      !!lastPostDate &&
-      lastPostDate.getUTCFullYear() === now.getUTCFullYear() &&
-      lastPostDate.getUTCMonth() === now.getUTCMonth() &&
-      lastPostDate.getUTCDate() === now.getUTCDate();
+    // const alreadyPostedToday =
+    //   !!lastPostDate &&
+    //   lastPostDate.getUTCFullYear() === now.getUTCFullYear() &&
+    //   lastPostDate.getUTCMonth() === now.getUTCMonth() &&
+    //   lastPostDate.getUTCDate() === now.getUTCDate();
 
-    if (alreadyPostedToday) {
-      return res.status(429).json({
-        success: false,
-        message: "An automated post was already made today.",
-      });
-    }
+    // if (alreadyPostedToday) {
+    //   return res.status(429).json({
+    //     success: false,
+    //     message: "An automated post was already made today.",
+    //   });
+    // }
 
     // Reset the monthly counter once a new calendar month begins
     const isNewMonth =

@@ -22,6 +22,8 @@ const GenerateVideoSchema = new Schema<GenerateVideoTypes>(
     progress: { type: Number, default: 0 },
     outputUrl: { type: String, required: false, default: "" },
     errorMessage: { type: String, required: false, default: "" },
+    isAdminPosted: { type: Boolean, default: false }, // Mark admin posts to exclude from auto-delete
+    cloudinaryPublicId: { type: String, required: false, default: "" }, // Store Cloudinary public_id for deletion
   },
   { timestamps: true },
 );

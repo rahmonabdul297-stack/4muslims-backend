@@ -35,6 +35,7 @@ const initWorker = async () => {
       errorMessage: string;
       audioUrl?: string;
       globalAyahNumber?: number;
+      cloudinaryPublicId?: string;
     }>,
   ) => {
     await GeneratedVideo.findByIdAndUpdate(mongoRenderId, data, {
@@ -85,7 +86,7 @@ const initWorker = async () => {
       let isUpdatingDb = false;
 
       try {
-        const outputUrl = await renderQuranOverlay({
+        const renderResult = await renderQuranOverlay({
           jobId,
           videoUrl: payload.videoUrl,
           audioUrl: payload.audioUrl,
@@ -110,10 +111,12 @@ const initWorker = async () => {
           },
         });
 
+        // Save both the output URL and the Cloudinary public_id for future cleanup
         await updateRenderStatus(payload.mongoRenderId, {
           status: "completed",
           progress: 100,
-          outputUrl,
+          outputUrl: renderResult.outputUrl,
+          cloudinaryPublicId: renderResult.cloudinaryPublicId,
         });
       } catch (error) {
         // Let Agenda's backoff decide whether to retry; only log here
@@ -127,9 +130,9 @@ const initWorker = async () => {
       }
     },
     {
-      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 900000,
+      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 1800000, // 30 minutes for Replicate rendering
       concurrency: 1,
-      backoff: exponential({ delay: 5000, maxRetries: 2 }), // 2 retries = 3 total attempts
+      backoff: exponential({ delay: 10000, maxRetries: 1 }), // 1 retry = 2 total attempts (long jobs shouldn't retry)
     },
   );
 

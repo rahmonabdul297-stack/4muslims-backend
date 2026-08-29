@@ -5,6 +5,10 @@ import {
   getVideos,
   postVideo,
 } from "../../controllers/admin/video.ts";
+import {
+  getStorageStats,
+  triggerStorageCleanup,
+} from "../../controllers/admin/storage.ts";
 import fileUpload from "../../multer.ts";
 
 const router = Router();
@@ -15,5 +19,8 @@ router.delete("/delete/:id", deleteUser);
 router.post("/post-videos", fileUpload.array("videos"), postVideo);
 router.get("/videos", getVideos);
 router.delete("/video/:id", deleteVideo);
+// storage management
+router.get("/storage/stats", getStorageStats);
+router.post("/storage/cleanup", triggerStorageCleanup);
 
 export default router;
