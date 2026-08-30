@@ -78,18 +78,44 @@ const formatAssTime = (seconds: number): string => {
 };
 
 /**
- * Build an ASS subtitle track with the Arabic ayah and its translation stacked
- * together (one line break apart) anchored in the lower-middle of the frame.
+ * Build an ASS subtitle track where the Arabic ayah and its translation are
+ * revealed word-by-word in sync with elapsed audio time, stacked together
+ * (Arabic just above the translation) in the lower-middle of the frame.
  */
 const generateAssContent = (
   arabicText: string,
   translationText: string,
   totalDurationSeconds: number,
 ): string => {
-  const shapedArabic = escapeAssText(shapeArabicText(arabicText));
-  const escapedTranslation = escapeAssText(translationText);
-  const end = formatAssTime(totalDurationSeconds + 1);
-  const text = `{\\c&H00FFFFFF&}{\\fs64}{\\b1}${shapedArabic}{\\r}\\N{\\c&H00E0E0E0&}{\\fs40}${escapedTranslation}`;
+  const arabicWords = arabicText.trim().split(/\s+/).filter(Boolean);
+  const translationWords = translationText.trim().split(/\s+/).filter(Boolean);
+
+  // Each language paces its own words evenly across the full clip, independent
+  // of the other language's word count, so timing stays natural for both.
+  const buildWordEvents = (
+    words: string[],
+    styleName: string,
+    shape: boolean,
+  ): string => {
+    if (words.length === 0) return "";
+    const perWord = totalDurationSeconds / words.length;
+
+    return words
+      .map((word, i) => {
+        const start = formatAssTime(i * perWord);
+        const end = formatAssTime((i + 1) * perWord);
+        const text = escapeAssText(shape ? shapeArabicText(word) : word);
+        return `Dialogue: 0,${start},${end},${styleName},,0,0,0,,${text}`;
+      })
+      .join("\n");
+  };
+
+  const arabicEvents = buildWordEvents(arabicWords, "Arabic", true);
+  const translationEvents = buildWordEvents(
+    translationWords,
+    "Translation",
+    false,
+  );
 
   return `[Script Info]
 Title: Quran Overlay
@@ -101,11 +127,13 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Overlay,Arial,40,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,220,1
+Style: Arabic,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,2,1,2,60,60,280,1
+Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,200,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,${end},Overlay,,0,0,0,,${text}
+${arabicEvents}
+${translationEvents}
 `;
 };
 
