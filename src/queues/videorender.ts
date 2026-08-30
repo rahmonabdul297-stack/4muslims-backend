@@ -4,6 +4,11 @@ import { MongoBackend } from "@agendajs/mongo-backend";
 import type { VideoRenderJobData } from "../types/videoRenderJob.types.ts";
 
 export const VIDEO_RENDER_JOB = "render-video";
+export const AUTOPOST_JOB = "autopost-user";
+
+export interface AutoPostJobData {
+  userId: string;
+}
 
 const mongoURI = process.env.LIVE_MONGODB_URI;
 if (!mongoURI) {

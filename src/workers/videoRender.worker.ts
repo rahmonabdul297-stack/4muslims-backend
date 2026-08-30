@@ -150,6 +150,36 @@ const initWorker = async () => {
     },
   );
 
+  // Autopost shares this same Agenda instance/concurrency cap so it never
+  // renders concurrently with a manual job, keeping the single instance's
+  // CPU/RAM usage bounded to one ffmpeg process at a time.
+  const { executeAutoPostForUser } =
+    await import("../controllers/autoposter.controller.ts");
+  const { AUTOPOST_JOB } = await import("../queues/videorender.ts");
+
+  agenda.define<{ userId: string }>(
+    AUTOPOST_JOB,
+    async (job) => {
+      const { userId } = job.attrs.data;
+      if (!userId) {
+        throw new Error("Missing userId in autopost job");
+      }
+      await executeAutoPostForUser(userId);
+    },
+    {
+      concurrency: 1,
+      backoff: exponential({ delay: 10000, maxRetries: 1 }),
+    },
+  );
+
+  agenda.on(`retry exhausted:${AUTOPOST_JOB}`, (error: Error, job) => {
+    const userId = (job.attrs.data as { userId?: string } | undefined)?.userId;
+    console.error(
+      `[autopost] Job failed permanently for user ${userId}:`,
+      error,
+    );
+  });
+
   await agenda.start();
   console.log("Video render worker started");
 };

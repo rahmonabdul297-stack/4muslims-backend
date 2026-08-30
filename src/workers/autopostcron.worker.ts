@@ -1,37 +1,32 @@
 import cron from "node-cron";
-import { triggerQuranAutoPost } from "../controllers/autoposter.controller.ts";
+import { agenda, AUTOPOST_JOB } from "../queues/videorender.ts";
 import { User } from "../models/User.ts";
 
 // Runs every day at 2:00 PM Nigerian time (WAT, UTC+1, no DST)
 cron.schedule(
   "0 14 * * *",
   async () => {
-    console.log("Running automated daily Quran auto-post job...");
+    console.log("Enqueuing daily Quran auto-post jobs...");
 
     const users = await User.find({
       "autoPostSettings.enabled": true,
       subscriptionStatus: "active",
-    });
+    }).select("_id");
 
     for (const user of users) {
-      const fakeReq = { id: user._id } as any;
-      const fakeRes = {
-        status: () => fakeRes,
-        json: (data: any) => console.log(`[autopost] user ${user._id}:`, data),
-      } as any;
-
       try {
-        await triggerQuranAutoPost(fakeReq, fakeRes);
+        // Enqueue only — the actual render/publish runs in the shared Agenda worker,
+        // never inside this cron tick, so one slow/stuck user can't block the rest.
+        await agenda.now(AUTOPOST_JOB, { userId: String(user._id) });
       } catch (error) {
-        // One user's failure (expired token, API outage, etc.) must not stop the rest of the batch
         console.error(
-          `[autopost] user ${user._id} failed:`,
+          `[autopost] Failed to enqueue user ${user._id}:`,
           (error as Error).message,
         );
       }
     }
 
-    console.log("Automated daily Quran auto-post job finished.");
+    console.log(`Enqueued ${users.length} auto-post job(s).`);
   },
   { timezone: "Africa/Lagos" },
 );
