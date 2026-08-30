@@ -7,8 +7,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/app.ts",
-    "start": "tsx src/app.ts",
-    "worker": "tsx src/workers/videoRender.worker.ts"
+    "start": "node --max-old-space-size=380 --import tsx src/app.ts",
+    "worker": "node --max-old-space-size=380 --import tsx src/workers/videoRender.worker.ts"
   },
   "keywords": [],
   "author": "",

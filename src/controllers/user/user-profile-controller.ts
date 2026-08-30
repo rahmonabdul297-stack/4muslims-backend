@@ -2,8 +2,9 @@ import type { Request, Response } from "express";
 import { User } from "../../models/User.ts";
 import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
 
+import fs from "fs";
 import bcrypt from "bcryptjs";
-import { cloudinaryDestroyer, cloudinaryUploader } from "../../cloudinary.ts";
+import { cloudinaryDestroyer, uploadImageFromPath } from "../../cloudinary.ts";
 
 const getUserProfile = async (req: Request, res: Response) => {
   const UserID = (req as any).id;
@@ -126,20 +127,25 @@ const updateUserProfile = async (req: Request, res: Response) => {
         }
       }
 
-      const cloudinaryResponse = await cloudinaryUploader(
-        newProfilePic.buffer,
-        "user-profiles",
-      );
-
-      if (!cloudinaryResponse || !cloudinaryResponse.secure_url) {
-        return sendErrorResponse(
-          res,
-          "Failed to upload image to cloud storage.",
-          500,
+      try {
+        const cloudinaryResponse = await uploadImageFromPath(
+          newProfilePic.path,
+          "user-profiles",
         );
-      }
 
-      user.profileImage = cloudinaryResponse.secure_url;
+        if (!cloudinaryResponse || !cloudinaryResponse.secure_url) {
+          return sendErrorResponse(
+            res,
+            "Failed to upload image to cloud storage.",
+            500,
+          );
+        }
+
+        user.profileImage = cloudinaryResponse.secure_url;
+      } finally {
+        // Multer diskStorage leaves the file in tmp_uploads/ regardless of outcome
+        await fs.promises.unlink(newProfilePic.path).catch(() => {});
+      }
     }
 
     // 3. Save changes in MongoDB

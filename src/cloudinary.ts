@@ -72,6 +72,37 @@ const cloudinaryUploader = (
   });
 };
 
+/**
+ * Upload a single image from a local disk path (Multer diskStorage) — never
+ * buffers the file in Node memory, Cloudinary's SDK streams it from disk.
+ */
+export const uploadImageFromPath = (
+  filePath: string,
+  folderName: string,
+): Promise<UploadApiResponse> => {
+  return new Promise((resolve, reject) => {
+    if (!filePath || !fs.existsSync(filePath)) {
+      return reject(new Error(`Image file not found at path: ${filePath}`));
+    }
+
+    cloudinary.uploader.upload(
+      filePath,
+      { folder: folderName, resource_type: "image", timeout: 120000 },
+      (error, result) => {
+        if (error) {
+          return reject(new Error(`Image upload failed: ${error.message}`));
+        }
+        if (!result || !result.secure_url) {
+          return reject(
+            new Error("Cloudinary returned an invalid result for image upload"),
+          );
+        }
+        resolve(result);
+      },
+    );
+  });
+};
+
 export const uploadVideoToCloudinary = (
   filePath: string,
   folderName: string,

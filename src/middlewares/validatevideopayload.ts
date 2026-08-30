@@ -1,5 +1,5 @@
 import axios from "axios";
-import { parseBuffer } from "music-metadata";
+import { parseStream } from "music-metadata";
 
 export interface ValidationParams {
   arabicText: string;
@@ -12,29 +12,36 @@ export interface ValidationParams {
 
 /**
  * Utility to retrieve audio duration in seconds using pure JavaScript parsing.
- * Downloads the buffer via axios to guarantee complete binary headers are available.
+ * Streams the response directly into the parser instead of buffering the whole
+ * file in memory, to keep RAM flat on low-memory hosts.
  */
 export const getAudioDuration = async (audioUrl: string): Promise<number> => {
   if (!audioUrl || typeof audioUrl !== "string") {
     throw new Error("Invalid audio URL provided.");
   }
 
+  const response = await axios.get(audioUrl, {
+    responseType: "stream",
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    },
+  });
+
+  const contentType =
+    (response.headers["content-type"] as string) || "audio/mpeg";
+  const contentLength = Number(response.headers["content-length"]) || undefined;
+  const fileInfo: { mimeType: string; size?: number } = {
+    mimeType: contentType,
+  };
+  if (contentLength !== undefined) {
+    fileInfo.size = contentLength;
+  }
+
   try {
-    // 1. Fetch entire audio file as an ArrayBuffer
-    const response = await axios.get<ArrayBuffer>(audioUrl, {
-      responseType: "arraybuffer",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      },
+    const metadata = await parseStream(response.data, fileInfo, {
+      duration: true,
     });
-
-    const buffer = Buffer.from(response.data);
-    const contentType =
-      (response.headers["content-type"] as string) || "audio/mpeg";
-
-    // 2. Parse metadata from the complete buffer
-    const metadata = await parseBuffer(buffer, contentType);
     const duration = metadata.format?.duration;
 
     if (!duration || isNaN(duration)) {
@@ -44,6 +51,10 @@ export const getAudioDuration = async (audioUrl: string): Promise<number> => {
     return duration;
   } catch (err: any) {
     throw new Error(`Failed to probe audio duration: ${err.message}`);
+  } finally {
+    // parseStream may stop reading before EOF once it has enough metadata;
+    // destroy the socket so the connection doesn't stay open.
+    response.data.destroy();
   }
 };
 

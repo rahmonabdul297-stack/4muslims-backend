@@ -8,6 +8,7 @@ import UserProfile from "./routes/user/user-profile-route.ts";
 import VideoRoutes from "./routes/video-routes.ts";
 import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
+import { clearAllTempDirs } from "./utils/tempDir.ts";
 
 // Node's built-in resolver intermittently fails SRV/TXT lookups on some networks; pin to public DNS
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
@@ -15,8 +16,8 @@ dns.setServers(["8.8.8.8", "1.1.1.1"]);
 const app = express();
 const PORT = 9999;
 
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ limit: "100mb", extended: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "healthy" });
@@ -31,6 +32,9 @@ app.use("/api/v1/payments", paymentRoutes);
 // Start server only after database is ready
 const startServer = async () => {
   try {
+    // Free disk space left behind by any crashed job before doing anything else
+    await clearAllTempDirs();
+
     await connectDB();
 
     // Import workers AFTER database is connected to prevent Agenda connection race
