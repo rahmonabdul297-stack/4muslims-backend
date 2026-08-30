@@ -20,7 +20,9 @@ export const downloadFileToPath = async (
 
   const response = await axios.get(url, {
     responseType: "stream",
-    timeout: 120000,
+    // Template videos / slow CDN-hosted recitations can take longer than 2 minutes
+    // to fully transfer on constrained hosting; 120s was tripping on legitimate downloads.
+    timeout: 300000,
     maxRedirects: 5,
     headers: {
       "User-Agent":
