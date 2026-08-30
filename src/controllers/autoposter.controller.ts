@@ -175,6 +175,7 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
       translation: quranData.translation,
       surahName: quranData.surahName,
       ayahNumber: quranData.ayahNumber,
+      userId: String(user._id),
     });
     const videoUrl = generatedVideo.videoUrl;
 
