@@ -2,9 +2,9 @@ import cron from "node-cron";
 import { triggerQuranAutoPost } from "../controllers/autoposter.controller.ts";
 import { User } from "../models/User.ts";
 
-// Runs every day at 1:00 PM Nigerian time (WAT, UTC+1, no DST)
+// Runs every day at 2:00 PM Nigerian time (WAT, UTC+1, no DST)
 cron.schedule(
-  "0 13 * * *",
+  "0 14 * * *",
   async () => {
     console.log("Running automated daily Quran auto-post job...");
 
