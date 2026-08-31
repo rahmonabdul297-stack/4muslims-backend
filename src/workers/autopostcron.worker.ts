@@ -4,12 +4,12 @@ import { User } from "../models/User.ts";
 
 /**
  * Scheduled auto-posting worker
- * Runs daily at 09:40 PM Nigerian time (WAT, UTC+1)
+ * Runs daily at 09:00 AM Nigerian time (WAT, UTC+1)
  */
 cron.schedule(
-  "40 21 * * *",
+  "0 9 * * *",
   async () => {
-    console.log("Enqueuing daily Quran auto-post jobs at 9:40 PM WAT...");
+    console.log("Enqueuing daily Quran auto-post jobs at 9:00 AM WAT...");
 
     try {
       const users = await User.find({
