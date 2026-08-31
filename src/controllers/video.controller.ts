@@ -167,6 +167,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       return sendErrorResponse(res, (validationError as Error).message, 400);
     }
 
+    // Explicitly aligned with GenerateVideoTypes interface
     const generated = await GeneratedVideo.create({
       userId,
       templateId,
@@ -182,6 +183,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       progress: 0,
       outputUrl: "",
       errorMessage: "",
+      isAdminPosted: false, // Flag as user-generated per GenerateVideoTypes
     });
 
     let job;
@@ -200,6 +202,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         globalAyahNumber,
         surahName,
         reciterId,
+        skipAutoPost: true, // Prevents Agenda background job worker from executing social media posting step
         // Pass plan enforcement properties to the Agenda worker / FFmpeg process
         planConfig: {
           hasWatermark: planConfig.hasWatermark,

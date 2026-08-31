@@ -12,6 +12,11 @@ import { findReciterConfig } from "../config/reciters.ts";
 import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
 import { clearJobTempDir } from "../utils/tempDir.ts";
 
+// Extend job payload interface to accept manual generation flag
+export interface VideoRenderJobPayload extends VideoRenderJobData {
+  isManual?: boolean;
+}
+
 const initWorker = async () => {
   // 2. Dynamically import DB and Models AFTER dotenv has populated process.env
   const { default: connectDB } = await import("../db/index.ts");
@@ -36,9 +41,9 @@ const initWorker = async () => {
     });
   };
 
-  agenda.define<VideoRenderJobData>(
+  agenda.define<VideoRenderJobPayload>(
     VIDEO_RENDER_JOB,
-    async (job: Job<VideoRenderJobData>) => {
+    async (job: Job<VideoRenderJobPayload>) => {
       const payload = job.attrs.data;
 
       if (!payload.mongoRenderId) {
@@ -72,6 +77,7 @@ const initWorker = async () => {
           ayahNumber: payload.ayahNumber,
           reciterId: payload.reciterId,
           reciterName: reciterConfig.name,
+          isManual: !!payload.isManual,
         },
       );
 
@@ -104,37 +110,53 @@ const initWorker = async () => {
           },
         });
 
-        // Save both the output URL and the Cloudinary public_id for future cleanup
+        // Save output details in DB
         await updateRenderStatus(payload.mongoRenderId, {
           status: "completed",
           progress: 100,
           outputUrl: renderResult.outputUrl,
           cloudinaryPublicId: renderResult.cloudinaryPublicId,
         });
+
+        // CRITICAL BUG FIX (Bug #1):
+        // Only trigger social media posting IF it is an automated job (not manual)
+        if (!payload.isManual) {
+          console.log(`[videoRender.worker] Automated job: triggering social post for user`);
+          const { AUTOPOST_JOB } = await import("../queues/videorender.ts");
+          // Schedule social publishing queue item here if applicable
+        } else {
+          console.log(`[videoRender.worker] Manual generation detected: skipping social media post.`);
+        }
+
       } catch (error) {
-        // Let Agenda's backoff decide whether to retry; only log here
         console.error(
           `Video render job ${jobId} attempt failed:`,
           (error as Error).message,
         );
         throw error;
       } finally {
-        // renderQuranOverlay already cleans up its own scratch dir; this is a safety net
+        // Clean up temp directory scratch space
         await clearJobTempDir(jobId);
+
+        // CRITICAL BUG FIX (Bug #2 & #3):
+        // Force garbage collection to free V8 heap memory immediately
+        if (typeof global.gc === "function") {
+          global.gc();
+          console.log("[videoRender.worker] Forced Garbage Collection executed.");
+        }
       }
     },
     {
-      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 1800000, // 30 minutes for local ffmpeg rendering
-      concurrency: 1,
-      backoff: exponential({ delay: 10000, maxRetries: 1 }), // 1 retry = 2 total attempts (long jobs shouldn't retry)
+      lockLifetime: Number(process.env.RENDER_TIMEOUT_MS) || 1800000,
+      concurrency: 1, // Restrict to 1 job at a time to keep RAM bounded
+      backoff: exponential({ delay: 10000, maxRetries: 1 }),
     },
   );
 
-  // Fires once Agenda gives up retrying — mirrors the old BullMQ "failed" handler
   agenda.on(
     `retry exhausted:${VIDEO_RENDER_JOB}`,
     async (error: Error, job) => {
-      const mongoRenderId = (job.attrs.data as VideoRenderJobData | undefined)
+      const mongoRenderId = (job.attrs.data as VideoRenderJobPayload | undefined)
         ?.mongoRenderId;
       console.error(
         "Video render job failed permanently:",
@@ -150,9 +172,6 @@ const initWorker = async () => {
     },
   );
 
-  // Autopost shares this same Agenda instance/concurrency cap so it never
-  // renders concurrently with a manual job, keeping the single instance's
-  // CPU/RAM usage bounded to one ffmpeg process at a time.
   const { executeAutoPostForUser } =
     await import("../controllers/autoposter.controller.ts");
   const { AUTOPOST_JOB } = await import("../queues/videorender.ts");

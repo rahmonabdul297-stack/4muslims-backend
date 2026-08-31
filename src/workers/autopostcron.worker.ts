@@ -2,31 +2,41 @@ import cron from "node-cron";
 import { agenda, AUTOPOST_JOB } from "../queues/videorender.ts";
 import { User } from "../models/User.ts";
 
-// Runs every day at 2:00 PM Nigerian time (WAT, UTC+1, no DST)
+/**
+ * Scheduled auto-posting worker
+ * Runs daily at 09:40 PM Nigerian time (WAT, UTC+1)
+ */
 cron.schedule(
-  "0 14 * * *",
+  "40 21 * * *",
   async () => {
-    console.log("Enqueuing daily Quran auto-post jobs...");
+    console.log("Enqueuing daily Quran auto-post jobs at 9:40 PM WAT...");
 
-    const users = await User.find({
-      "autoPostSettings.enabled": true,
-      subscriptionStatus: "active",
-    }).select("_id");
+    try {
+      const users = await User.find({
+        "autoPostSettings.enabled": true,
+        subscriptionStatus: "active",
+      }).select("_id");
 
-    for (const user of users) {
-      try {
-        // Enqueue only — the actual render/publish runs in the shared Agenda worker,
-        // never inside this cron tick, so one slow/stuck user can't block the rest.
-        await agenda.now(AUTOPOST_JOB, { userId: String(user._id) });
-      } catch (error) {
-        console.error(
-          `[autopost] Failed to enqueue user ${user._id}:`,
-          (error as Error).message,
-        );
+      for (const user of users) {
+        try {
+          // Enqueue only — the actual render/publish runs in the shared Agenda worker,
+          // never inside this cron tick, so one slow/stuck user can't block the rest.
+          await agenda.now(AUTOPOST_JOB, { userId: String(user._id) });
+        } catch (error) {
+          console.error(
+            `[autopost] Failed to enqueue user ${user._id}:`,
+            (error as Error).message,
+          );
+        }
       }
-    }
 
-    console.log(`Enqueued ${users.length} auto-post job(s).`);
+      console.log(`Enqueued ${users.length} auto-post job(s).`);
+    } catch (dbError) {
+      console.error(
+        "[autopost] Database error while fetching active auto-post users:",
+        (dbError as Error).message,
+      );
+    }
   },
   { timezone: "Africa/Lagos" },
 );

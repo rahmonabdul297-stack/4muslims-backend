@@ -90,8 +90,6 @@ const generateAssContent = (
   const arabicWords = arabicText.trim().split(/\s+/).filter(Boolean);
   const translationWords = translationText.trim().split(/\s+/).filter(Boolean);
 
-  // Each language paces its own words evenly across the full clip, independent
-  // of the other language's word count, so timing stays natural for both.
   const buildWordEvents = (
     words: string[],
     styleName: string,
@@ -157,7 +155,7 @@ interface RunFfmpegParams {
 
 /**
  * Merge the (looped) template video, the recitation audio and the ASS subtitle
- * track into a single mp4 using a local ffmpeg binary — no Replicate, no Redis.
+ * track into a single mp4 using local ffmpeg configured strictly to stay under 512MB RAM.
  */
 const runFfmpegRender = ({
   videoPath,
@@ -183,15 +181,19 @@ const runFfmpegRender = ({
         "-c:v",
         "libx264",
         "-preset",
-        "veryfast",
+        "ultrafast", // MEMORY FIX: Fastest encoding preset uses minimal memory buffer
+        "-threads",
+        "1", // MEMORY FIX: Force single thread to prevent CPU/RAM spiking on Render
+        "-max_muxing_queue_size",
+        "1024", // MEMORY FIX: Caps buffer queue in RAM
         "-crf",
-        "23",
+        "26", // Slightly higher compression to save bandwidth and memory
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "192k",
+        "128k", // 128k audio buffer is sufficient and saves memory
         "-shortest",
         "-y",
       ])
@@ -275,7 +277,7 @@ export const renderQuranOverlay = async ({
     if (onProgress) await Promise.resolve(onProgress(30));
 
     // Step 4: Render with local ffmpeg (loops video to cover full audio length)
-    console.log(`[quranOverlay] Rendering job ${safeJobId} with local ffmpeg`);
+    console.log(`[quranOverlay] Rendering job ${safeJobId} with memory-optimized ffmpeg`);
     await runFfmpegRender({
       videoPath,
       audioPath,
@@ -340,10 +342,6 @@ export const renderQuranOverlay = async ({
 
     if (onProgress) await Promise.resolve(onProgress(100));
 
-    // Keep the plain Cloudinary URL here — this value is also handed straight to
-    // social platform APIs (Facebook/YouTube/TikTok) to fetch the file server-side,
-    // and fl_attachment breaks their fetchers. Download-forcing is applied only
-    // when serving a URL to a human browser (see video.controller.ts).
     return {
       outputUrl: uploadResult.secure_url,
       cloudinaryPublicId: uploadResult.public_id,
@@ -357,7 +355,7 @@ export const renderQuranOverlay = async ({
       `Quran overlay rendering failed: ${(error as Error).message}`,
     );
   } finally {
-    // Scratch space only — always clean up regardless of caller (worker or autopost)
+    // Scratch space only — always clean up regardless of caller
     await fs.promises
       .rm(tempDir, { recursive: true, force: true })
       .catch(() => {});
