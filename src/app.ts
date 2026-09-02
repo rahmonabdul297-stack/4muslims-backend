@@ -1,6 +1,7 @@
 import "dotenv/config";
 import dns from "dns";
 import express from "express";
+import cors from "cors";
 import Admin from "./routes/admin/admin-routes.ts";
 import Public from "./routes/public/public-routes.ts";
 import UserAuth from "./routes/user/user-auth-route.ts";
@@ -15,6 +16,27 @@ dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 const app = express();
 const PORT = 9999;
+
+// Allowed origins: configured frontend URL plus local dev servers
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow non-browser requests (no origin header) like curl/postman
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+      }
+    },
+    credentials: true,
+  }),
+);
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
