@@ -34,6 +34,19 @@ export const sendErrorResponse = (
   });
 };
 
+// Cross-site (frontend/backend on different domains) requires SameSite=None + Secure;
+// same-site local dev falls back to Lax so cookies work over plain HTTP.
+export const getAuthCookieOptions = (expires?: Date) => {
+  const isProduction = process.env.NODE_ENV === "production";
+  return {
+    path: "/",
+    httpOnly: true,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    secure: isProduction,
+    ...(expires ? { expires } : {}),
+  };
+};
+
 export const CheckSession = async (req: Request, res: Response) => {
   const cookie = req.headers.cookie;
   if (!cookie) {
@@ -140,9 +153,6 @@ export const refreshSession = async (req: Request, res: Response) => {
       );
     }
 
-    // 2. Cookie configuration helper
-    const isProduction = process.env.NODE_ENV === "production";
-
     // 3. Generate new Access Token (15 min)
     const newAccessToken = jwt.sign(
       { id: user._id },
@@ -150,13 +160,11 @@ export const refreshSession = async (req: Request, res: Response) => {
       { expiresIn: "15m" },
     );
 
-    res.cookie("accessToken", newAccessToken, {
-      path: "/",
-      expires: new Date(Date.now() + 1000 * 60 * 15), // 15 mins
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction, // <-- Fixed: Only true in production!
-    });
+    res.cookie(
+      "accessToken",
+      newAccessToken,
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15)), // 15 mins
+    );
 
     // 4. Generate new extended Refresh Token (7 days)
     const cookieMaxAge = 1000 * 60 * 60 * 24 * 7; // 7 days
@@ -166,13 +174,11 @@ export const refreshSession = async (req: Request, res: Response) => {
       { expiresIn: "7d" },
     );
 
-    res.cookie("refreshToken", newRefreshToken, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction, // <-- Fixed: Only true in production!
-      expires: new Date(Date.now() + cookieMaxAge), // Rolling 7-day extension!
-    });
+    res.cookie(
+      "refreshToken",
+      newRefreshToken,
+      getAuthCookieOptions(new Date(Date.now() + cookieMaxAge)), // Rolling 7-day extension!
+    );
 
     return sendSuccessResponse(res, "Session tokens successfully renewed!", {
       accessToken: newAccessToken,

@@ -3,6 +3,7 @@ import axios from "axios";
 import { google } from "googleapis";
 import jwt from "jsonwebtoken";
 import { User } from "../../models/User.ts";
+import { getAuthCookieOptions } from "../../utils/helper.ts";
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.YOUTUBE_CLIENT_ID,
@@ -518,32 +519,27 @@ export const googleCallback = async (req: Request, res: Response) => {
     if (!refreshTokenSecret) {
       throw new Error("REFRESH_TOKEN_SECRET is not configured.");
     }
-    const isProduction = process.env.NODE_ENV === "production";
 
     // Session cookies mirror the email/password Login controller for consistency
     const accessToken = jwt.sign({ id: user._id }, jwtSecret, {
       expiresIn: "7d",
     });
-    res.cookie(String(user._id), accessToken, {
-      path: "/",
-      expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction,
-    });
+    res.cookie(
+      String(user._id),
+      accessToken,
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
+    );
 
     const initialRefreshToken = jwt.sign(
       { id: user._id, sessionType: "initial" },
       refreshTokenSecret,
       { expiresIn: "15m" },
     );
-    res.cookie("refreshToken", initialRefreshToken, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: isProduction,
-      expires: new Date(Date.now() + 1000 * 60 * 15),
-    });
+    res.cookie(
+      "refreshToken",
+      initialRefreshToken,
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15)),
+    );
 
     return res.redirect(`${process.env.FRONTEND_URL}/dashboard?login=google`);
   } catch (error: any) {

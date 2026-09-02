@@ -10,6 +10,7 @@ import bcrypt, { genSaltSync } from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { resetForgetPasswordToken } from "../../models/forgotpassword.ts";
 import { emailVerificationCode } from "../../models/emailverificationcode.ts";
+import { getAuthCookieOptions } from "../../utils/helper.ts";
 const JWT_USER_SECRET = "gdguigsgyyaihcgghs";
 // register as new user
 const Register = async (req: Request, res: Response, next: NextFunction) => {
@@ -87,13 +88,11 @@ const Login = async (req: Request, res: Response, next: NextFunction) => {
       { expiresIn: "7d" },
     );
 
-    res.cookie(String(exsitingUser._id), token, {
-      path: "/",
-      expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV !== "development",
-    });
+    res.cookie(
+      String(exsitingUser._id),
+      token,
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
+    );
 
     const initialRefreshToken = jwt.sign(
       { id: exsitingUser._id, sessionType: "initial" },
@@ -101,13 +100,11 @@ const Login = async (req: Request, res: Response, next: NextFunction) => {
       { expiresIn: "15m" },
     );
 
-    res.cookie("refreshToken", initialRefreshToken, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV !== "development",
-      expires: new Date(Date.now() + 1000 * 60 * 15),
-    });
+    res.cookie(
+      "refreshToken",
+      initialRefreshToken,
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15)),
+    );
     req.body = { exsitingUser };
     next();
 
@@ -157,12 +154,7 @@ const logOut = async (req: Request, res: Response) => {
       return sendErrorResponse(res, "No active session found.");
     }
     if (userId) {
-      res.clearCookie(String(userId), {
-        path: "/",
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV !== "development",
-      });
+      res.clearCookie(String(userId), getAuthCookieOptions());
     } else {
       const cookies = Object.fromEntries(
         cookieHeader.split("; ").map((c) => {
@@ -174,21 +166,11 @@ const logOut = async (req: Request, res: Response) => {
         (key) => key !== "refreshToken",
       );
       if (accessTokenKey) {
-        res.clearCookie(accessTokenKey, {
-          path: "/",
-          httpOnly: true,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV !== "development",
-        });
+        res.clearCookie(accessTokenKey, getAuthCookieOptions());
       }
     }
 
-    res.clearCookie("refreshToken", {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV !== "development",
-    });
+    res.clearCookie("refreshToken", getAuthCookieOptions());
 
     return sendSuccessResponse(res, "Successfully logged out!");
   } catch (error) {
