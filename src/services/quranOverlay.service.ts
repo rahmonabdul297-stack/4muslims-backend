@@ -77,10 +77,13 @@ const formatAssTime = (seconds: number): string => {
   return `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
 };
 
+// Number of words revealed together per subtitle cue
+const WORDS_PER_CUE = 5;
+
 /**
  * Build an ASS subtitle track where the Arabic ayah and its translation are
- * revealed word-by-word in sync with elapsed audio time, stacked together
- * (Arabic just above the translation) in the lower-middle of the frame.
+ * revealed in groups of WORDS_PER_CUE words in sync with elapsed audio time,
+ * stacked together (Arabic just above the translation) in the lower-middle of the frame.
  */
 const generateAssContent = (
   arabicText: string,
@@ -90,26 +93,31 @@ const generateAssContent = (
   const arabicWords = arabicText.trim().split(/\s+/).filter(Boolean);
   const translationWords = translationText.trim().split(/\s+/).filter(Boolean);
 
-  const buildWordEvents = (
+  const buildWordGroupEvents = (
     words: string[],
     styleName: string,
     shape: boolean,
   ): string => {
     if (words.length === 0) return "";
     const perWord = totalDurationSeconds / words.length;
+    const events: string[] = [];
 
-    return words
-      .map((word, i) => {
-        const start = formatAssTime(i * perWord);
-        const end = formatAssTime((i + 1) * perWord);
-        const text = escapeAssText(shape ? shapeArabicText(word) : word);
-        return `Dialogue: 0,${start},${end},${styleName},,0,0,0,,${text}`;
-      })
-      .join("\n");
+    for (let i = 0; i < words.length; i += WORDS_PER_CUE) {
+      const group = words.slice(i, i + WORDS_PER_CUE);
+      const start = formatAssTime(i * perWord);
+      const end = formatAssTime(
+        Math.min(i + WORDS_PER_CUE, words.length) * perWord,
+      );
+      const joined = group.join(" ");
+      const text = escapeAssText(shape ? shapeArabicText(joined) : joined);
+      events.push(`Dialogue: 0,${start},${end},${styleName},,0,0,0,,${text}`);
+    }
+
+    return events.join("\n");
   };
 
-  const arabicEvents = buildWordEvents(arabicWords, "Arabic", true);
-  const translationEvents = buildWordEvents(
+  const arabicEvents = buildWordGroupEvents(arabicWords, "Arabic", true);
+  const translationEvents = buildWordGroupEvents(
     translationWords,
     "Translation",
     false,
@@ -125,8 +133,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,2,1,2,60,60,280,1
-Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,200,1
+Style: Arabic,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
+Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,200,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -277,7 +285,9 @@ export const renderQuranOverlay = async ({
     if (onProgress) await Promise.resolve(onProgress(30));
 
     // Step 4: Render with local ffmpeg (loops video to cover full audio length)
-    console.log(`[quranOverlay] Rendering job ${safeJobId} with memory-optimized ffmpeg`);
+    console.log(
+      `[quranOverlay] Rendering job ${safeJobId} with memory-optimized ffmpeg`,
+    );
     await runFfmpegRender({
       videoPath,
       audioPath,
