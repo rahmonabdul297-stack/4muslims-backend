@@ -3,6 +3,7 @@ dotenv.config();
 
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import reshaper from "arabic-persian-reshaper";
 import bidiFactory from "bidi-js";
 import { v2 as cloudinary } from "cloudinary";
@@ -11,6 +12,12 @@ import ffmpegStaticPath from "ffmpeg-static";
 import { parseFile } from "music-metadata";
 import { downloadFileToPath } from "../utils/downloadFile.ts";
 import { ensureJobTempDir } from "../utils/tempDir.ts";
+
+// libass needs an explicit fontsdir to find the bundled Amiri font at render time
+const FONTS_DIR = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../fonts",
+);
 
 const ensureCloudinaryConfig = () => {
   const cloudName = process.env.CLOUD_NAME?.trim();
@@ -142,7 +149,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Arial,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
+Style: Arabic,Amiri,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
 Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,200,1
 
 [Events]
@@ -184,12 +191,15 @@ const runFfmpegRender = ({
 }: RunFfmpegParams): Promise<void> => {
   return new Promise((resolve, reject) => {
     const escapedAssPath = escapeSubtitlesFilterPath(assPath);
+    const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
     ffmpeg()
       .input(videoPath)
       .inputOptions(["-stream_loop", "-1"])
       .input(audioPath)
-      .complexFilter([`[0:v]scale=1920:-2,subtitles='${escapedAssPath}'[vout]`])
+      .complexFilter([
+        `[0:v]scale=1920:-2,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`,
+      ])
       .outputOptions([
         "-map",
         "[vout]",
