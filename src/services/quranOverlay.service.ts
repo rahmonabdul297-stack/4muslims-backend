@@ -44,9 +44,18 @@ if (ffmpegStaticPath) {
 
 const bidi = bidiFactory();
 
+// Uthmani-script tashkeel/Quranic annotation marks that libass's fallback Arabic
+// font can't stack cleanly at overlay size, making the text look cluttered
+const ARABIC_DIACRITICS_REGEX =
+  /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED\u08D4-\u08E1\u08E3-\u08FF]/g;
+
+const stripArabicDiacritics = (text: string): string =>
+  text.replace(ARABIC_DIACRITICS_REGEX, "");
+
 export const shapeArabicText = (text: string): string => {
   if (!text) return "";
-  const joinedText = reshaper.ArabicShaper.convertArabic(text);
+  const cleanedText = stripArabicDiacritics(text);
+  const joinedText = reshaper.ArabicShaper.convertArabic(cleanedText);
   const embeddingLevels = bidi.getEmbeddingLevels(joinedText);
   const reordered = bidi.getReorderedString(joinedText, embeddingLevels);
   return reordered.split("").reverse().join("");
