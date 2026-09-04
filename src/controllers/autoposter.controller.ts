@@ -10,6 +10,7 @@ import {
 import { generateVideoFromAudio } from "../services/video.service.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 import { PLAN_CONFIGS } from "../config/plan.config.ts";
+import { findReciterConfig } from "../config/reciters.ts";
 import { agenda, AUTOPOST_JOB } from "../queues/videorender.ts";
 export const updateAutoPostSettings = async (req: Request, res: Response) => {
   try {
@@ -53,6 +54,13 @@ export const updateAutoPostSettings = async (req: Request, res: Response) => {
 
     // Determine plan frequency (PRO = 5/month, ULTIMATE = Daily)
     const postFrequency = plan === "ULTIMATE" ? "DAILY" : "5_PER_MONTH";
+
+    if (defaultReciterId && !findReciterConfig(defaultReciterId)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid defaultReciterId: ${defaultReciterId}.`,
+      });
+    }
 
     // Update autoPostSettings safely with exactOptionalPropertyTypes compliance
     user.autoPostSettings = {

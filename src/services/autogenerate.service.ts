@@ -1,4 +1,6 @@
 import axios from "axios";
+import { findReciterConfig } from "../config/reciters.ts";
+import { buildQuranAudioUrl } from "./audioUrl.service.ts";
 
 export type SocialPlatform = "youtube" | "tiktok" | "facebook";
 
@@ -24,17 +26,28 @@ export const generateQuranContent = async (
   const randomAyahId = Math.floor(Math.random() * 6236) + 1;
   const activeReciter = reciterId || DEFAULT_RECITER_EDITION;
 
+  // Text/translation only — the recitation audio is resolved separately below,
+  // since not every configured reciter (e.g. everyayah.com-only ones) has an
+  // alquran.cloud edition, and requesting one would 400 and fail the whole job.
   const response = await axios.get(
-    `https://api.alquran.cloud/v1/ayah/${randomAyahId}/editions/quran-uthmani,en.sahih,${activeReciter}`,
+    `https://api.alquran.cloud/v1/ayah/${randomAyahId}/editions/quran-uthmani,en.sahih`,
   );
 
   const data = response.data.data;
   const uthmaniText: string = data[0].text;
   const translationText: string = data[1].text;
-  const audioUrl: string = data[2].audio;
   const surahName: string = data[0].surah.englishName;
   const surahNumber: number = data[0].surah.number;
   const ayahNumber: number = data[0].numberInSurah;
+
+  const reciterConfig = findReciterConfig(activeReciter);
+  const audioUrl = buildQuranAudioUrl(
+    activeReciter,
+    surahNumber,
+    ayahNumber,
+    reciterConfig?.bitrate,
+    reciterConfig,
+  );
 
   const cleanSurah = surahName.replace(/[^a-zA-Z0-9]/g, "");
   const title = `Surah ${surahName} [Verse ${ayahNumber}] - Quran Recitation`;
