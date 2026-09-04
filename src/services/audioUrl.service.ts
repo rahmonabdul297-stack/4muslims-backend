@@ -1,3 +1,5 @@
+import type { ReciterConfig } from "../config/reciters.ts";
+
 const SURAH_AYAH_COUNTS = [
   7, 286, 200, 176, 120, 165, 206, 75, 129, 109, 123, 111, 43, 52, 99, 128, 111,
   110, 98, 135, 112, 78, 118, 64, 77, 227, 93, 88, 69, 60, 34, 30, 73, 54, 45,
@@ -81,8 +83,22 @@ export const buildQuranAudioUrl = (
   surahNumber: number,
   ayahNumber: number,
   bitrate?: string | number,
+  reciterConfig?: ReciterConfig,
 ) => {
   const parsedReciterId = normalizeReciterId(reciterId);
+
+  if (reciterConfig?.audioSource === "everyayah") {
+    if (!reciterConfig.everyayahFolder) {
+      throw new Error(
+        `Reciter ${reciterId} is configured for everyayah but is missing everyayahFolder`,
+      );
+    }
+    // everyayah.com filenames use per-surah ayah numbers (SSSAAA), not the global ayah number
+    const paddedSurah = String(surahNumber).padStart(3, "0");
+    const paddedAyah = String(ayahNumber).padStart(3, "0");
+    return `https://everyayah.com/data/${reciterConfig.everyayahFolder}/${paddedSurah}${paddedAyah}.mp3`;
+  }
+
   const globalAyahNumber = getGlobalAyahNumber(surahNumber, ayahNumber);
   const configuredBitrate = normalizeBitrate(bitrate);
   return `https://cdn.islamic.network/quran/audio/${configuredBitrate}/${parsedReciterId}/${globalAyahNumber}.mp3`;

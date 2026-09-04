@@ -10,6 +10,7 @@ import {
   normalizeQuranAudioUrl,
 } from "../services/audioUrl.service.ts";
 import { findReciterConfig } from "../config/reciters.ts";
+import type { ReciterConfig } from "../config/reciters.ts";
 import { validateRenderPayload } from "../middlewares/validatevideopayload.ts";
 import { toDownloadUrl } from "../utils/cloudinaryHelper.ts";
 
@@ -26,8 +27,15 @@ const findAudioUrl = async (
   surahNumber: number,
   ayahNumber: number,
   bitrate?: string | number,
+  reciterConfig?: ReciterConfig,
 ) => {
-  return buildQuranAudioUrl(reciterId, surahNumber, ayahNumber, bitrate);
+  return buildQuranAudioUrl(
+    reciterId,
+    surahNumber,
+    ayahNumber,
+    bitrate,
+    reciterConfig,
+  );
 };
 
 const fetchQuranAyah = async (surahNumber: number, ayahNumber: number) => {
@@ -133,6 +141,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       surahNumber,
       ayahNumber,
       bitrate,
+      reciterConfig,
     );
     audioUrl = normalizeQuranAudioUrl(
       audioUrl,

@@ -3,6 +3,8 @@ export interface ReciterConfig {
   name: string;
   bitrate?: number;
   audioSource?: "everyayah" | "cdn";
+  // required when audioSource is "everyayah": the reciter's folder name on everyayah.com
+  everyayahFolder?: string;
 }
 
 export const RECITERS: ReciterConfig[] = [
@@ -24,7 +26,12 @@ export const RECITERS: ReciterConfig[] = [
   { id: "ar.minshawimujawwad", name: "Minshawi (Mujawwad)", bitrate: 64 },
   { id: "ar.hanirifai", name: "Hani Rifai", bitrate: 64 },
   { id: "ar.aymanswoaid", name: "Ayman Sowaid", bitrate: 64 },
-  { id: "ar.dosari", name: "Yasser Al-Dosari", audioSource: "everyayah" },
+  {
+    id: "ar.dosari",
+    name: "Yasser Al-Dosari",
+    audioSource: "everyayah",
+    everyayahFolder: "Yasser_Ad-Dussary_128kbps",
+  },
 ];
 
 export const findReciterConfig = (reciterId: string) =>
