@@ -1,40 +1,29 @@
 import fs from "fs";
 import axios from "axios";
 
-const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
-
-/**
- * Stream a remote file to a local path. Used to pull template videos and
- * recitation audio into job-scoped scratch space before handing off to ffmpeg.
- */
-export const downloadFileToPath = async (
-  url: string,
-  destPath: string,
-): Promise<void> => {
-  const parsed = new URL(url);
-  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
-    throw new Error(
-      `Refusing to download from disallowed protocol: ${parsed.protocol}`,
-    );
-  }
-
-  const response = await axios.get(url, {
+export const downloadFileToPath = async (url: string, outputPath: string): Promise<void> => {
+  const response = await axios({
+    method: "GET",
+    url,
     responseType: "stream",
-    // Template videos / slow CDN-hosted recitations can take longer than 2 minutes
-    // to fully transfer on constrained hosting; 120s was tripping on legitimate downloads.
-    timeout: 300000,
-    maxRedirects: 5,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
+    maxRedirects: 5, // ✅ Ensure HTTP 301/302 redirects from islamic.network are followed
+    timeout: 30000,
   });
 
-  await new Promise<void>((resolve, reject) => {
-    const writer = fs.createWriteStream(destPath);
-    response.data.pipe(writer);
-    writer.on("finish", () => resolve());
-    writer.on("error", (err: Error) => reject(err));
-    response.data.on("error", (err: Error) => reject(err));
+  // ✅ CHECK CONTENT TYPE: Ensure the CDN didn't return a 200 OK with an HTML error body
+  const contentType = response.headers["content-type"];
+  if (contentType && !contentType.toString().includes("audio") && !contentType.toString().includes("octet-stream") && !contentType.includes("video")) {
+    throw new Error(`Invalid content type received from URL: ${contentType}. Expected audio format.`);
+  }
+
+  const writer = fs.createWriteStream(outputPath);
+  response.data.pipe(writer);
+
+  return new Promise((resolve, reject) => {
+    writer.on("finish", resolve);
+    writer.on("error", (err) => {
+      fs.unlink(outputPath, () => {}); // Clean up broken file
+      reject(err);
+    });
   });
 };

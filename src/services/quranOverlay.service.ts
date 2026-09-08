@@ -193,13 +193,13 @@ const runFfmpegRender = ({
     const escapedAssPath = escapeSubtitlesFilterPath(assPath);
     const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
+    const filterString = `[0:v]scale=1920:-2,subtitles=${escapedAssPath}:fontsdir=${escapedFontsDir}[vout]`;
+
     ffmpeg()
       .input(videoPath)
       .inputOptions(["-stream_loop", "-1"])
       .input(audioPath)
-      .complexFilter([
-        `[0:v]scale=1920:-2,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`,
-      ])
+      .complexFilter([filterString])
       .outputOptions([
         "-map",
         "[vout]",
