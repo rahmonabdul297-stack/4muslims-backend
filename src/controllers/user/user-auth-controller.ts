@@ -73,7 +73,7 @@ const verifyAccount = async (req: Request, res: Response) => {
 };
 
 // login into acc
-const Login = async (req: Request, res: Response, next: NextFunction) => {
+const Login = async (req: Request, res: Response) => {
   const { exsitingUser, password } = req.body;
 
   const isPasswordMatch = bcrypt.compareSync(password, exsitingUser.password);
@@ -85,32 +85,33 @@ const Login = async (req: Request, res: Response, next: NextFunction) => {
     const token = jwt.sign(
       { id: exsitingUser._id },
       (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string,
-      { expiresIn: "7d" },
+      { expiresIn: "7d" }
     );
 
     res.cookie(
       String(exsitingUser._id),
       token,
-      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7))
     );
 
     const initialRefreshToken = jwt.sign(
       { id: exsitingUser._id, sessionType: "initial" },
       process.env.REFRESH_TOKEN_SECRET as string,
-      { expiresIn: "15m" },
+      { expiresIn: "15m" }
     );
 
     res.cookie(
       "refreshToken",
       initialRefreshToken,
-      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15)),
+      getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15))
     );
-    req.body = { exsitingUser };
-    next();
 
-    return sendSuccessResponse(res, "successfully logged in!");
+    // Directly return the success response without calling next()
+    return sendSuccessResponse(res, "successfully logged in!", {
+      user: exsitingUser,
+    });
   } catch (error) {
-    console.log((error as Error).message);
+    console.error((error as Error).message);
     return sendErrorResponse(res, (error as Error).message);
   }
 };

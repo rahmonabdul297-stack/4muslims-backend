@@ -79,9 +79,7 @@ const escapeAssText = (text: string): string => {
  * Converts Windows backslashes to forward slashes and escapes single quotes.
  */
 const escapeSubtitlesFilterPath = (filePath: string): string => {
-  return filePath
-    .replace(/\\/g, "/")
-    .replace(/'/g, "'\\''");
+  return filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
 };
 
 const formatAssTime = (seconds: number): string => {
@@ -143,7 +141,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Amiri,90,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
+Style: Arabic,Amiri,92,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
 Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,200,1
 
 [Events]

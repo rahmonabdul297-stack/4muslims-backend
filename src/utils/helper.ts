@@ -54,49 +54,50 @@ export const CheckSession = async (req: Request, res: Response) => {
   }
   return sendSuccessResponse(res, "session found!");
 };
+
+// Extend Express Request interface to attach user context cleanly
+export interface AuthenticatedRequest extends Request {
+  userId?: string;
+}
+
 export const verifyUserLoginToken = async (
-  req: Request,
+  req: AuthenticatedRequest,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const cookieHeader = req.headers.cookie;
-    if (!cookieHeader) {
-      return sendErrorResponse(
-        res,
-        "no cookies, you're not authenticated",
-        401,
-      );
-    }
+    // 1. Read cookies reliably via cookie-parser (or raw fallback)
+    const cookies = req.cookies || parseCookies(req.headers.cookie);
 
-    const cookies = Object.fromEntries(
-      cookieHeader.split("; ").map((c) => {
-        const [key, ...val] = c.split("=");
-        return [key, val.join("=")];
-      }),
-    );
-
-    const accessTokenKey = Object.keys(cookies).find(
-      (key) => key !== "refreshToken",
-    );
-    const token = accessTokenKey ? cookies[accessTokenKey] : null;
+    // 2. Fetch token by explicit key (falls back to legacy dynamic ID lookup if needed)
+    const token =
+      cookies.accessToken ||
+      cookies.token ||
+      Object.keys(cookies).find((k) => k !== "refreshToken" && k.length === 24)
+        ? cookies[
+            Object.keys(cookies).find(
+              (k) => k !== "refreshToken" && k.length === 24,
+            )!
+          ]
+        : null;
 
     if (!token) {
       return sendErrorResponse(
         res,
-        "no session token, You're not authenticated!",
+        "No session token, you are not authenticated!",
         401,
       );
     }
 
-    const user = jwt.verify(
+    // 3. Verify JWT payload
+    const decoded = jwt.verify(
       token,
       (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string,
     ) as TokenPayloadTypes;
 
-    (req as any).id = user.id;
-    req.headers.cookie = cookieHeader;
-    next();
+    // 4. Attach decoded ID to req object and proceed
+    req.userId = decoded.id;
+    return next();
   } catch (error) {
     console.error("Access Token Verification Error:", (error as Error).message);
     return sendErrorResponse(
@@ -106,6 +107,22 @@ export const verifyUserLoginToken = async (
     );
   }
 };
+
+/**
+ * Fallback parser if express 'cookie-parser' middleware isn't registered on app
+ */
+const parseCookies = (cookieHeader?: string): Record<string, string> => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(";").reduce(
+    (acc, cookie) => {
+      const [key, ...value] = cookie.trim().split("=");
+      if (key) acc[key] = value.join("=");
+      return acc;
+    },
+    {} as Record<string, string>,
+  );
+};
+
 //refreshSession
 export const refreshSession = async (req: Request, res: Response) => {
   try {
