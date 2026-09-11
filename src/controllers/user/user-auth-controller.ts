@@ -73,12 +73,36 @@ const verifyAccount = async (req: Request, res: Response) => {
 };
 
 // login into acc
-const Login = async (req: Request, res: Response) => {
+interface TokenPayloadTypes {
+  id: string;
+  [key: string]: any;
+}
+
+/**
+ * Fallback parser for raw cookie header strings
+ */
+const parseCookies = (cookieHeader?: string): Record<string, string> => {
+  if (!cookieHeader) return {};
+  return cookieHeader.split(";").reduce((acc, cookie) => {
+    const [key, ...value] = cookie.trim().split("=");
+    if (key) acc[key] = value.join("=");
+    return acc;
+  }, {} as Record<string, string>);
+};
+
+/**
+ * LOGIN CONTROLLER
+ */
+ const Login = async (req: Request, res: Response) => {
   const { exsitingUser, password } = req.body;
+
+  if (!exsitingUser || !password) {
+    return sendErrorResponse(res, "Missing credentials", 400);
+  }
 
   const isPasswordMatch = bcrypt.compareSync(password, exsitingUser.password);
   if (!isPasswordMatch) {
-    return sendErrorResponse(res, "invalid email or password");
+    return sendErrorResponse(res, "invalid email or password", 401);
   }
 
   try {
@@ -88,6 +112,7 @@ const Login = async (req: Request, res: Response) => {
       { expiresIn: "7d" }
     );
 
+    // Set 24-char ObjectId cookie
     res.cookie(
       String(exsitingUser._id),
       token,
@@ -106,13 +131,12 @@ const Login = async (req: Request, res: Response) => {
       getAuthCookieOptions(new Date(Date.now() + 1000 * 60 * 15))
     );
 
-    // Directly return the success response without calling next()
     return sendSuccessResponse(res, "successfully logged in!", {
       user: exsitingUser,
     });
   } catch (error) {
-    console.error((error as Error).message);
-    return sendErrorResponse(res, (error as Error).message);
+    console.error("Login Error:", (error as Error).message);
+    return sendErrorResponse(res, (error as Error).message, 500);
   }
 };
 

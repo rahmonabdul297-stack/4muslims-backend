@@ -55,44 +55,42 @@ export const CheckSession = async (req: Request, res: Response) => {
   return sendSuccessResponse(res, "session found!");
 };
 
-// Extend Express Request interface to attach user context cleanly
+
 export interface AuthenticatedRequest extends Request {
   userId?: string;
 }
-
 export const verifyUserLoginToken = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction,
+  next: NextFunction
 ) => {
   try {
     // 1. Read cookies reliably via cookie-parser (or raw fallback)
     const cookies = req.cookies || parseCookies(req.headers.cookie);
 
-    // 2. Fetch token by explicit key (falls back to legacy dynamic ID lookup if needed)
+    // 2. Target 24-character Mongo ObjectId key or static 'accessToken'/'token'
+    const objectIdRegex = /^[0-9a-fA-F]{24}$/;
+    const dynamicKey = Object.keys(cookies).find(
+      (key) => key !== "refreshToken" && objectIdRegex.test(key)
+    );
+
     const token =
       cookies.accessToken ||
       cookies.token ||
-      Object.keys(cookies).find((k) => k !== "refreshToken" && k.length === 24)
-        ? cookies[
-            Object.keys(cookies).find(
-              (k) => k !== "refreshToken" && k.length === 24,
-            )!
-          ]
-        : null;
+      (dynamicKey ? cookies[dynamicKey] : null);
 
     if (!token) {
       return sendErrorResponse(
         res,
         "No session token, you are not authenticated!",
-        401,
+        401
       );
     }
 
     // 3. Verify JWT payload
     const decoded = jwt.verify(
       token,
-      (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string,
+      (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string
     ) as TokenPayloadTypes;
 
     // 4. Attach decoded ID to req object and proceed
@@ -103,7 +101,7 @@ export const verifyUserLoginToken = async (
     return sendErrorResponse(
       res,
       "Access token expired or invalid. Please refresh.",
-      401,
+      401
     );
   }
 };
