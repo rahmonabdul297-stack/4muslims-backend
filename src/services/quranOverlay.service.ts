@@ -51,8 +51,7 @@ if (ffmpegStaticPath) {
 
 const bidi = bidiFactory();
 
-// Uthmani-script tashkeel/Quranic annotation marks that libass's fallback Arabic
-// font can't stack cleanly at overlay size, making the text look cluttered
+// Uthmani-script tashkeel/Quranic annotation marks
 const ARABIC_DIACRITICS_REGEX =
   /[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED\u08D4-\u08E1\u08E3-\u08FF]/g;
 
@@ -68,10 +67,6 @@ export const shapeArabicText = (text: string): string => {
   return reordered.split("").reverse().join("");
 };
 
-/**
- * Strip ASS override-tag delimiters from user text so recitation/translation
- * content can never inject subtitle filter syntax.
- */
 const escapeAssText = (text: string): string => {
   return (text || "")
     .replace(/\\/g, "\\\\")
@@ -79,9 +74,14 @@ const escapeAssText = (text: string): string => {
     .replace(/\r?\n/g, "\\N");
 };
 
-/** Escape a filesystem path for use inside the ffmpeg `subtitles=` filter argument. */
+/**
+ * Safely escapes file paths for FFmpeg's filtergraph parser.
+ * Converts Windows backslashes to forward slashes and escapes single quotes.
+ */
 const escapeSubtitlesFilterPath = (filePath: string): string => {
-  return filePath.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
+  return filePath
+    .replace(/\\/g, "/")
+    .replace(/'/g, "'\\''");
 };
 
 const formatAssTime = (seconds: number): string => {
@@ -93,14 +93,8 @@ const formatAssTime = (seconds: number): string => {
   return `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
 };
 
-// Number of words revealed together per subtitle cue
 const WORDS_PER_CUE = 5;
 
-/**
- * Build an ASS subtitle track where the Arabic ayah and its translation are
- * revealed in groups of WORDS_PER_CUE words in sync with elapsed audio time,
- * stacked together (Arabic just above the translation) in the lower-middle of the frame.
- */
 const generateAssContent = (
   arabicText: string,
   translationText: string,
@@ -149,7 +143,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Amiri,80,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
+Style: Arabic,Amiri,90,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,280,1
 Style: Translation,Arial,38,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,200,1
 
 [Events]
@@ -160,12 +154,24 @@ ${translationEvents}
 };
 
 const getAudioDurationFromFile = async (filePath: string): Promise<number> => {
-  const metadata = await parseFile(filePath);
-  const duration = metadata.format?.duration;
-  if (!duration || isNaN(duration)) {
-    throw new Error("Could not determine audio duration from downloaded file");
+  try {
+    const metadata = await parseFile(filePath);
+    const duration = metadata.format?.duration;
+    if (duration && !isNaN(duration)) return duration;
+  } catch (_err) {
+    // Fallback to FFprobe if music-metadata parsing fails
   }
-  return duration;
+
+  return new Promise<number>((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err || !metadata.format?.duration) {
+        return reject(
+          new Error("Could not determine audio duration from downloaded file"),
+        );
+      }
+      resolve(metadata.format.duration);
+    });
+  });
 };
 
 interface RunFfmpegParams {
@@ -177,10 +183,6 @@ interface RunFfmpegParams {
   onProgress?: (progress: number) => void;
 }
 
-/**
- * Merge the (looped) template video, the recitation audio and the ASS subtitle
- * track into a single mp4 using local ffmpeg configured strictly to stay under 512MB RAM.
- */
 const runFfmpegRender = ({
   videoPath,
   audioPath,
@@ -190,8 +192,8 @@ const runFfmpegRender = ({
   onProgress,
 }: RunFfmpegParams): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const escapedAssPath = escapeSubtitlesFilterPath(assPath);
-    const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
+    const escapedAssPath = `'${escapeSubtitlesFilterPath(assPath)}'`;
+    const escapedFontsDir = `'${escapeSubtitlesFilterPath(FONTS_DIR)}'`;
 
     const filterString = `[0:v]scale=1920:-2,subtitles=${escapedAssPath}:fontsdir=${escapedFontsDir}[vout]`;
 
@@ -208,19 +210,19 @@ const runFfmpegRender = ({
         "-c:v",
         "libx264",
         "-preset",
-        "ultrafast", // MEMORY FIX: Fastest encoding preset uses minimal memory buffer
+        "ultrafast",
         "-threads",
-        "1", // MEMORY FIX: Force single thread to prevent CPU/RAM spiking on Render
+        "1",
         "-max_muxing_queue_size",
-        "1024", // MEMORY FIX: Caps buffer queue in RAM
+        "1024",
         "-crf",
-        "26", // Slightly higher compression to save bandwidth and memory
+        "26",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "128k", // 128k audio buffer is sufficient and saves memory
+        "128k",
         "-shortest",
         "-y",
       ])
@@ -253,11 +255,6 @@ export interface OverlayRenderParams {
   onProgress?: (progress: number) => Promise<void> | void;
 }
 
-/**
- * Render Quran overlay using a local ffmpeg binary in job-scoped scratch space.
- * Inputs are downloaded to tmp/<jobId>, rendered, uploaded to Cloudinary, then
- * the scratch directory is deleted — nothing persists on local disk afterward.
- */
 export const renderQuranOverlay = async ({
   jobId,
   videoUrl,
@@ -280,7 +277,6 @@ export const renderQuranOverlay = async ({
   try {
     if (onProgress) await Promise.resolve(onProgress(5));
 
-    // Step 1: Pull the template video and recitation audio into scratch space
     await Promise.all([
       downloadFileToPath(videoUrl, videoPath),
       downloadFileToPath(audioUrl, audioPath),
@@ -288,12 +284,10 @@ export const renderQuranOverlay = async ({
 
     if (onProgress) await Promise.resolve(onProgress(20));
 
-    // Step 2: Determine audio duration from the downloaded file (no re-fetch)
     const audioDuration = await getAudioDurationFromFile(audioPath);
 
     if (onProgress) await Promise.resolve(onProgress(25));
 
-    // Step 3: Write the ASS subtitle track (Arabic top, translation bottom)
     const assContent = generateAssContent(
       arabicText,
       translationText,
@@ -303,7 +297,6 @@ export const renderQuranOverlay = async ({
 
     if (onProgress) await Promise.resolve(onProgress(30));
 
-    // Step 4: Render with local ffmpeg (loops video to cover full audio length)
     console.log(
       `[quranOverlay] Rendering job ${safeJobId} with memory-optimized ffmpeg`,
     );
@@ -320,10 +313,8 @@ export const renderQuranOverlay = async ({
 
     if (onProgress) await Promise.resolve(onProgress(85));
 
-    // Step 5: Upload the rendered file to Cloudinary for permanent storage
     const publicId = `quran_video_${safeJobId}`;
     console.log(`[quranOverlay] Uploading rendered video to Cloudinary...`);
-    console.log(`  Public ID: ${publicId}`);
 
     const uploadResult = await new Promise<any>((resolve, reject) => {
       cloudinary.uploader.upload_large(
@@ -343,31 +334,15 @@ export const renderQuranOverlay = async ({
               new Error(`Cloudinary video upload failed: ${error.message}`),
             );
           }
-          if (!result) {
+          if (!result?.secure_url) {
             return reject(
-              new Error("Cloudinary returned empty result for video upload"),
-            );
-          }
-          if (!result.secure_url) {
-            return reject(
-              new Error(
-                `Cloudinary video upload missing secure_url: ${JSON.stringify(result)}`,
-              ),
-            );
-          }
-          if (!result.public_id) {
-            return reject(
-              new Error("Cloudinary video upload missing public_id"),
+              new Error("Cloudinary video upload missing secure_url"),
             );
           }
           resolve(result);
         },
       );
     });
-
-    console.log(`[quranOverlay] Rendered video for job ${safeJobId}`);
-    console.log(`  Output URL: ${uploadResult.secure_url}`);
-    console.log(`  Public ID: ${uploadResult.public_id}`);
 
     if (onProgress) await Promise.resolve(onProgress(100));
 
@@ -384,7 +359,6 @@ export const renderQuranOverlay = async ({
       `Quran overlay rendering failed: ${(error as Error).message}`,
     );
   } finally {
-    // Scratch space only — always clean up regardless of caller
     await fs.promises
       .rm(tempDir, { recursive: true, force: true })
       .catch(() => {});
