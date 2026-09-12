@@ -55,53 +55,58 @@ export const CheckSession = async (req: Request, res: Response) => {
   return sendSuccessResponse(res, "session found!");
 };
 
-
 export interface AuthenticatedRequest extends Request {
   userId?: string;
 }
 export const verifyUserLoginToken = async (
   req: AuthenticatedRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) => {
   try {
-    // 1. Read cookies reliably via cookie-parser (or raw fallback)
-    const cookies = req.cookies || parseCookies(req.headers.cookie);
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) {
+      return sendErrorResponse(
+        res,
+        "no cookies, you're not authenticated",
+        401,
+      );
+    }
 
-    // 2. Target 24-character Mongo ObjectId key or static 'accessToken'/'token'
-    const objectIdRegex = /^[0-9a-fA-F]{24}$/;
-    const dynamicKey = Object.keys(cookies).find(
-      (key) => key !== "refreshToken" && objectIdRegex.test(key)
+    const cookies = Object.fromEntries(
+      cookieHeader.split("; ").map((c) => {
+        const [key, ...val] = c.split("=");
+        return [key, val.join("=")];
+      }),
     );
 
-    const token =
-      cookies.accessToken ||
-      cookies.token ||
-      (dynamicKey ? cookies[dynamicKey] : null);
+    const accessTokenKey = Object.keys(cookies).find(
+      (key) => key !== "refreshToken",
+    );
+    const token = accessTokenKey ? cookies[accessTokenKey] : null;
 
     if (!token) {
       return sendErrorResponse(
         res,
-        "No session token, you are not authenticated!",
-        401
+        "no session token, You're not authenticated!",
+        401,
       );
     }
 
-    // 3. Verify JWT payload
-    const decoded = jwt.verify(
+    const user = jwt.verify(
       token,
-      (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string
+      (process.env.JWT_USER_SECRET || JWT_USER_SECRET) as string,
     ) as TokenPayloadTypes;
 
-    // 4. Attach decoded ID to req object and proceed
-    req.userId = decoded.id;
-    return next();
+    (req as any).id = user.id;
+    req.headers.cookie = cookieHeader;
+    next();
   } catch (error) {
     console.error("Access Token Verification Error:", (error as Error).message);
     return sendErrorResponse(
       res,
       "Access token expired or invalid. Please refresh.",
-      401
+      401,
     );
   }
 };
