@@ -13,7 +13,7 @@ import { parseFile } from "music-metadata";
 import { downloadFileToPath } from "../utils/downloadFile.ts";
 import { ensureJobTempDir } from "../utils/tempDir.ts";
 
-// libass needs an explicit fontsdir to find the bundled Amiri font at render time
+// libass needs an explicit fontsdir to find bundled fonts at render time
 const FONTS_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "../fonts",
@@ -79,7 +79,10 @@ const escapeAssText = (text: string): string => {
  * Converts Windows backslashes to forward slashes and escapes single quotes.
  */
 const escapeSubtitlesFilterPath = (filePath: string): string => {
-  return filePath.replace(/\\/g, "/").replace(/'/g, "'\\''");
+  let sanitized = filePath.replace(/\\/g, "/");
+  sanitized = sanitized.replace(/^([A-Za-z]):/, "$1\\:");
+  sanitized = sanitized.replace(/'/g, "\\'");
+  return sanitized;
 };
 
 const formatAssTime = (seconds: number): string => {
@@ -91,12 +94,16 @@ const formatAssTime = (seconds: number): string => {
   return `${hours}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
 };
 
-const WORDS_PER_CUE = 5;
+// Optimal independent word-count thresholds for 9:16 vertical displays
+const ARABIC_WORDS_PER_CUE = 3;
+const TRANSLATION_WORDS_PER_CUE = 4;
 
 const generateAssContent = (
   arabicText: string,
   translationText: string,
   totalDurationSeconds: number,
+  surahName?: string,
+  ayahNumber?: number,
 ): string => {
   const arabicWords = arabicText.trim().split(/\s+/).filter(Boolean);
   const translationWords = translationText.trim().split(/\s+/).filter(Boolean);
@@ -105,16 +112,17 @@ const generateAssContent = (
     words: string[],
     styleName: string,
     shape: boolean,
+    chunkSize: number,
   ): string => {
     if (words.length === 0) return "";
     const perWord = totalDurationSeconds / words.length;
     const events: string[] = [];
 
-    for (let i = 0; i < words.length; i += WORDS_PER_CUE) {
-      const group = words.slice(i, i + WORDS_PER_CUE);
+    for (let i = 0; i < words.length; i += chunkSize) {
+      const group = words.slice(i, i + chunkSize);
       const start = formatAssTime(i * perWord);
       const end = formatAssTime(
-        Math.min(i + WORDS_PER_CUE, words.length) * perWord,
+        Math.min(i + chunkSize, words.length) * perWord,
       );
       const joined = group.join(" ");
       const text = escapeAssText(shape ? shapeArabicText(joined) : joined);
@@ -124,28 +132,50 @@ const generateAssContent = (
     return events.join("\n");
   };
 
-  const arabicEvents = buildWordGroupEvents(arabicWords, "Arabic", true);
+  const arabicEvents = buildWordGroupEvents(
+    arabicWords,
+    "Arabic",
+    true,
+    ARABIC_WORDS_PER_CUE,
+  );
   const translationEvents = buildWordGroupEvents(
     translationWords,
     "Translation",
     false,
+    TRANSLATION_WORDS_PER_CUE,
   );
+
+  // Generate top header badge event if surahName or ayahNumber is provided
+  let headerEvent = "";
+  if (surahName || ayahNumber) {
+    const startTime = formatAssTime(0);
+    const endTime = formatAssTime(totalDurationSeconds);
+
+    const headerTitleParts: string[] = [];
+    if (surahName) headerTitleParts.push(`Surah ${surahName}`);
+    if (ayahNumber) headerTitleParts.push(`Ayah ${ayahNumber}`);
+
+    const headerText = escapeAssText(headerTitleParts.join(" • "));
+    headerEvent = `Dialogue: 0,${startTime},${endTime},Header,,0,0,0,,${headerText}\n`;
+  }
 
   return `[Script Info]
 Title: Quran Overlay
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: 1080
+PlayResY: 1920
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Arabic,Amiri,105,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,60,60,250,1
-Style: Translation,Arial,40,&H00E0E0E0,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,1,1,2,190,1
+Style: Header,Arial,32,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,3,6,0,8,40,40,220,1
+Style: Arabic,Amiri,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,3,12,0,5,60,60,550,1
+Style: Translation,Arial,48,&H0000D7FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,3,10,0,5,80,80,820,1
+
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-${arabicEvents}
+${headerEvent}${arabicEvents}
 ${translationEvents}
 `;
 };
@@ -156,7 +186,7 @@ const getAudioDurationFromFile = async (filePath: string): Promise<number> => {
     const duration = metadata.format?.duration;
     if (duration && !isNaN(duration)) return duration;
   } catch (_err) {
-    // Fallback to FFprobe if music-metadata parsing fails
+    // Fallback to FFprobe
   }
 
   return new Promise<number>((resolve, reject) => {
@@ -189,10 +219,10 @@ const runFfmpegRender = ({
   onProgress,
 }: RunFfmpegParams): Promise<void> => {
   return new Promise((resolve, reject) => {
-    const escapedAssPath = `'${escapeSubtitlesFilterPath(assPath)}'`;
-    const escapedFontsDir = `'${escapeSubtitlesFilterPath(FONTS_DIR)}'`;
+    const escapedAssPath = escapeSubtitlesFilterPath(assPath);
+    const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
-    const filterString = `[0:v]scale=1920:-2,subtitles=${escapedAssPath}:fontsdir=${escapedFontsDir}[vout]`;
+    const filterString = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`;
 
     ffmpeg()
       .input(videoPath)
@@ -258,6 +288,8 @@ export const renderQuranOverlay = async ({
   audioUrl,
   arabicText,
   translationText,
+  surahName,
+  ayahNumber,
   onProgress,
 }: OverlayRenderParams): Promise<{
   outputUrl: string;
@@ -289,6 +321,8 @@ export const renderQuranOverlay = async ({
       arabicText,
       translationText,
       audioDuration,
+      surahName,
+      ayahNumber,
     );
     await fs.promises.writeFile(assPath, assContent, "utf-8");
 
