@@ -169,9 +169,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Header,Arial,32,&H00FFFFFF,&H000000FF,&H00000000,&H90000000,1,0,0,0,100,100,2,0,3,6,0,8,40,40,220,1
-Style: Arabic,Amiri,90,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,3,12,0,5,60,60,550,1
-Style: Translation,Arial,48,&H0000D7FF,&H000000FF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,3,10,0,5,80,80,820,1
+Style: Header,Arial,38,&H00FFFFFF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,2,0,1,4,2,8,40,40,200,1
+Style: Arabic,Amiri,130,&H00FFFFFF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,0,0,1,8,4,5,60,60,620,1
+Style: Translation,Arial,58,&H0000D7FF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,0,0,1,5,3,5,80,80,980,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -237,19 +237,19 @@ const runFfmpegRender = ({
         "-c:v",
         "libx264",
         "-preset",
-        "ultrafast",
+        "fast",
+        "-crf",
+        "18",
         "-threads",
-        "1",
+        "0",
         "-max_muxing_queue_size",
         "1024",
-        "-crf",
-        "26",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        "192k",
         "-shortest",
         "-y",
       ])
