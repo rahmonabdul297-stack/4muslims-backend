@@ -33,9 +33,6 @@ export const sendErrorResponse = (
     message: message,
   });
 };
-
-// Cross-site (frontend/backend on different domains) requires SameSite=None + Secure;
-// same-site local dev falls back to Lax so cookies work over plain HTTP.
 export const getAuthCookieOptions = (expires?: Date) => {
   const isProduction = process.env.NODE_ENV === "production";
   return {
