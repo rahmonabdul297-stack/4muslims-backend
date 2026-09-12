@@ -145,7 +145,6 @@ const generateAssContent = (
     TRANSLATION_WORDS_PER_CUE,
   );
 
-  // Generate top header badge event if surahName or ayahNumber is provided
   let headerEvent = "";
   if (surahName || ayahNumber) {
     const startTime = formatAssTime(0);
@@ -169,9 +168,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Header,Arial,38,&H00FFFFFF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,2,0,1,4,2,8,40,40,200,1
-Style: Arabic,Amiri,130,&H00FFFFFF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,0,0,1,8,4,5,60,60,620,1
-Style: Translation,Arial,58,&H0000D7FF,&H000000FF,&H00000000,&HFF000000,1,0,0,0,100,100,0,0,1,5,3,5,80,80,980,1
+Style: Header,Arial,42,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,1,0,0,0,100,100,2,0,1,2,1,8,40,40,200,1
+Style: Arabic,Amiri,140,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,1,0,0,0,100,100,0,0,1,3,2,5,60,60,620,1
+Style: Translation,Arial,62,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,0,0,0,0,100,100,0,0,1,2,1,5,80,80,980,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -222,7 +221,8 @@ const runFfmpegRender = ({
     const escapedAssPath = escapeSubtitlesFilterPath(assPath);
     const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
-    const filterString = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`;
+    // Added high-quality lanczos scaling algorithm
+    const filterString = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`;
 
     ffmpeg()
       .input(videoPath)
@@ -237,13 +237,15 @@ const runFfmpegRender = ({
         "-c:v",
         "libx264",
         "-preset",
-        "fast",
+        "medium", // Changed from fast to medium for higher encoding efficiency
         "-crf",
-        "18",
+        "16", // Lowered from 18 to 16 for near-lossless output quality
+        "-maxrate",
+        "8M", // Enforce high max bitrate for fast action/motion
+        "-bufsize",
+        "16M",
         "-threads",
         "0",
-        "-max_muxing_queue_size",
-        "1024",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
