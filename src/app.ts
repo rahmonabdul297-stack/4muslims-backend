@@ -15,7 +15,7 @@ import { clearAllTempDirs } from "./utils/tempDir.ts";
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 const app = express();
-const PORT = process.env.PORT || 8888;
+const PORT = process.env.PORT || 9999;
 
 //  Essential for HTTPS cookies behind reverse proxies (Render, Nginx, Vercel)
 app.set("trust proxy", 1);
