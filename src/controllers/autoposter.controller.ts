@@ -164,6 +164,7 @@ export const executeAutoPostForUser = async (userId: string): Promise<void> => {
     translation: quranData.translation,
     surahName: quranData.surahName,
     ayahNumber: quranData.ayahNumber,
+    ayahs: quranData.ayahs,
     userId: String(user._id),
   });
   const videoUrl = generatedVideo.videoUrl;
@@ -234,7 +235,7 @@ export const executeAutoPostForUser = async (userId: string): Promise<void> => {
       postId = await publishToTikTokDirectPost(
         token,
         videoUrl,
-        quranData.title,
+        quranData.description,
       );
       break;
     }

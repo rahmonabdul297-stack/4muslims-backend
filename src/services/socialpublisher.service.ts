@@ -34,14 +34,14 @@ export const publishToYouTube = async (
 export const publishToTikTokDirectPost = async (
   accessToken: string | undefined,
   videoUrl: string,
-  title: string,
+  caption: string,
 ): Promise<string> => {
   // Initialize TikTok direct post via URL source
   const initResponse = await axios.post(
     "https://open.tiktokapis.com/v2/post/publish/video/init/",
     {
       post_info: {
-        title: title.slice(0, 150),
+        title: caption.slice(0, 2200),
         privacy_level: "PUBLIC_TO_EVERYONE",
         disable_duet: false,
         disable_stitch: false,

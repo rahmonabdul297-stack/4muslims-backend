@@ -1,9 +1,10 @@
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
-import { renderQuranOverlay } from "./quranOverlay.service.ts";
+import { renderQuranOverlay, type AyahContent} from "./quranOverlay.service.ts";
 import { Video } from "../models/videotemp.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 dotenv.config();
+
 const cloud_name = process.env.CLOUD_NAME;
 const api_key = process.env.CLOUD_API_KEY;
 const api_secret = process.env.CLOUD_API_SECRET;
@@ -18,11 +19,12 @@ cloudinary.config({
 });
 
 export interface GenerateVideoParams {
-  audioUrl: string;
+  audioUrl: string; // Primary audio URL (legacy fallback)
   arabicText: string;
   translation: string;
   surahName: string;
   ayahNumber: number;
+  ayahs?: AyahContent[];
   userId: string;
 }
 
@@ -35,7 +37,7 @@ export interface GeneratedVideoResult {
 export const generateVideoFromAudio = async (
   params: GenerateVideoParams,
 ): Promise<GeneratedVideoResult> => {
-  const { audioUrl, surahName, ayahNumber, translation, userId } = params;
+  const { audioUrl, surahName, ayahNumber, translation, ayahs, userId } = params;
 
   const cloudName = process.env.CLOUD_NAME;
   if (!cloudName) {
@@ -67,7 +69,6 @@ export const generateVideoFromAudio = async (
   const eligibleTemplates = templates.filter(
     (t) => !recentlyUsedSet.has(String(t._id)),
   );
-  // If every template has been used this week (small library), fall back to the full pool
   const candidatePool =
     eligibleTemplates.length > 0 ? eligibleTemplates : templates;
 
@@ -90,6 +91,7 @@ export const generateVideoFromAudio = async (
     arabicText: params.arabicText,
     translationText: translation,
     surahName,
+    ...(ayahs ? { ayahs } : {}), // Conditionally spread to satisfy exactOptionalPropertyTypes
   });
 
   return {
