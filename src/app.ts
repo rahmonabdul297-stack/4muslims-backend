@@ -23,7 +23,7 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "http://localhost:5173",
-  "http://127.0.0.1:5173",
+  "https://4muslims.vercel.app",
 ].filter(Boolean) as string[];
 
 const corsOptions: cors.CorsOptions = {
