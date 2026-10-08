@@ -326,7 +326,7 @@ export const renderQuranOverlay = async ({
   const safeJobId = path.basename(tempDir);
 
   const videoPath = path.join(tempDir, "input_video.mp4");
-  const mergedAudioPath = path.join(tempDir, "merged_audio.mp3");
+  const mergedAudioPath = path.join(tempDir, "merged_audio.m4a");
   const assPath = path.join(tempDir, "subtitles.ass");
   const outputPath = path.join(tempDir, "output.mp4");
 
