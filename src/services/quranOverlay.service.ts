@@ -159,8 +159,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Header,Amiri,52,&H00FFFFFF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,2,0,3,2,0,8,40,40,140,1
-Style: Arabic,Amiri,140,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,500,1
+Style: Header,Amiri,140,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,1,0,0,0,100,100,2,0,1,2,1,8,40,40,140,1
+Style: Arabic,Amiri,152,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,500,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -201,29 +201,92 @@ const getAudioDurationFromFile = async (filePath: string): Promise<number> => {
   });
 };
 
-const concatAudioFiles = (
+// const concatAudioFiles = (
+//   inputPaths: string[],
+//   outputPath: string,
+// ): Promise<void> => {
+//   return new Promise((resolve, reject) => {
+//     const command = ffmpeg();
+//     inputPaths.forEach((p) => command.input(p));
+
+//     const filterString =
+//       inputPaths.map((_, i) => `[${i}:a]`).join("") +
+//       `concat=n=${inputPaths.length}:v=0:a=1[outa]`;
+
+//     command
+//       .complexFilter([filterString])
+//       .outputOptions(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"])
+//       .on("error", (err) =>
+//         reject(new Error(`Audio concatenation failed: ${err.message}`)),
+//       )
+//       .on("end", () => resolve())
+//       .save(outputPath);
+//   });
+// };
+// const concatAudioFiles = (
+//   inputPaths: string[],
+//   outputPath: string,
+// ): Promise<void> => {
+//   return new Promise((resolve, reject) => {
+//     const command = ffmpeg();
+//     inputPaths.forEach((p) => command.input(p));
+
+//     const filterString =
+//       inputPaths.map((_, i) => `[${i}:a]`).join("") +
+//       `concat=n=${inputPaths.length}:v=0:a=1[outa]`;
+
+//     command
+//       .complexFilter([filterString])
+//       .outputOptions([
+//         "-map",
+//         "[outa]",
+//         "-c:a",
+//         "libmp3lame", // Explicitly encode as a valid MP3 container
+//         "-b:a",
+//         "192k",
+//         "-ar",
+//         "44100", // Force standard sample rate so headers are perfectly readable
+//         "-ac",
+//         "2", // Force stereo channel layout
+//       ])
+//       .on("error", (err) =>
+//         reject(new Error(`Audio concatenation failed: ${err.message}`)),
+//       )
+//       .on("end", () => resolve())
+//       .save(outputPath);
+//   });
+// };
+
+const concatAudioFiles = async (
   inputPaths: string[],
   outputPath: string,
 ): Promise<void> => {
+  const tempDir = path.dirname(outputPath);
+  const listFilePath = path.join(tempDir, `concat_list_${Date.now()}.txt`);
+
+  // Create a text manifest file listing each audio file for FFmpeg's concat demuxer
+  const fileContent = inputPaths
+    .map((p) => `file '${p.replace(/\\/g, "/")}'`)
+    .join("\n");
+
+  await fs.promises.writeFile(listFilePath, fileContent, "utf-8");
+
   return new Promise((resolve, reject) => {
-    const command = ffmpeg();
-    inputPaths.forEach((p) => command.input(p));
-
-    const filterString =
-      inputPaths.map((_, i) => `[${i}:a]`).join("") +
-      `concat=n=${inputPaths.length}:v=0:a=1[outa]`;
-
-    command
-      .complexFilter([filterString])
-      .outputOptions(["-map", "[outa]", "-c:a", "aac", "-b:a", "192k"])
-      .on("error", (err) =>
-        reject(new Error(`Audio concatenation failed: ${err.message}`)),
-      )
-      .on("end", () => resolve())
+    ffmpeg()
+      .input(listFilePath)
+      .inputOptions(["-f", "concat", "-safe", "0"])
+      .outputOptions(["-c:a", "libmp3lame", "-b:a", "192k"])
+      .on("error", async (err) => {
+        await fs.promises.unlink(listFilePath).catch(() => {});
+        reject(new Error(`Audio concatenation failed: ${err.message}`));
+      })
+      .on("end", async () => {
+        await fs.promises.unlink(listFilePath).catch(() => {});
+        resolve();
+      })
       .save(outputPath);
   });
 };
-
 interface RunFfmpegParams {
   videoPath: string;
   audioPath: string;
@@ -326,7 +389,7 @@ export const renderQuranOverlay = async ({
   const safeJobId = path.basename(tempDir);
 
   const videoPath = path.join(tempDir, "input_video.mp4");
-  const mergedAudioPath = path.join(tempDir, "merged_audio.m4a");
+  const mergedAudioPath = path.join(tempDir, "merged_audio.mp3");
   const assPath = path.join(tempDir, "subtitles.ass");
   const outputPath = path.join(tempDir, "output.mp4");
 
