@@ -1,6 +1,9 @@
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
-import { renderQuranOverlay, type AyahContent} from "./quranOverlay.service.ts";
+import {
+  renderQuranOverlay,
+  type AyahContent,
+} from "./quranOverlay.service.ts";
 import { Video } from "../models/videotemp.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 dotenv.config();
@@ -37,7 +40,8 @@ export interface GeneratedVideoResult {
 export const generateVideoFromAudio = async (
   params: GenerateVideoParams,
 ): Promise<GeneratedVideoResult> => {
-  const { audioUrl, surahName, ayahNumber, translation, ayahs, userId } = params;
+  const { audioUrl, surahName, ayahNumber, translation, ayahs, userId } =
+    params;
 
   const cloudName = process.env.CLOUD_NAME;
   if (!cloudName) {
@@ -57,10 +61,9 @@ export const generateVideoFromAudio = async (
     );
   }
 
-  // Don't repeat a background this user's autopost already used in the past 7 days
+  // Don't repeat a background used anywhere in the system in the past 7 days globally
   const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const recentlyUsedTemplateIds = await GeneratedVideo.distinct("templateId", {
-    userId,
     templateId: { $ne: null },
     createdAt: { $gte: oneWeekAgo },
   });
