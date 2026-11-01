@@ -126,7 +126,7 @@ export const generateQuranContent = async (
     const fullText = `Surah ${surahName} ${rangeLabel}\n\n"${combinedTranslation}"\n\n${hashtags}`;
     description = fullText.slice(0, 4000);
   } else if (targetPlatform === "facebook") {
-    const hashtags = `#Quran #fyp #Islam #Surah${cleanSurah}`;
+    const hashtags = `#Quran #fyp #Islam #Surah${cleanSurah} #goViral`;
     description =
       `🎧🌹✨ Quranic Reflection: Surah ${surahName} ${rangeLabel}\n\n` +
       `Arabic:\n${combinedArabic}\n\n` +

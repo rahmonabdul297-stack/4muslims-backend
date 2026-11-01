@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/app.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/app.ts"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/v1/cron/auto-post",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/v1/cron/storage-cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

@@ -10,26 +10,32 @@ import UserProfile from "./routes/user/user-profile-route.ts";
 import VideoRoutes from "./routes/video-routes.ts";
 import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
-import { clearAllTempDirs } from "./utils/tempDir.ts";
+import cronRoutes from "./routes/cron/cron-routes.ts";
 
 dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 const app = express();
-const PORT = process.env.PORT || 8888;
 
 //  Essential for HTTPS cookies behind reverse proxies (Render, Nginx, Vercel)
 app.set("trust proxy", 1);
 
-const allowedOrigins = [
+const configuredOrigins = [
   process.env.FRONTEND_URL,
+  ...(process.env.FRONTEND_URLS?.split(",") ?? []),
+]
+  .map((origin) => origin?.trim())
+  .filter((origin): origin is string => Boolean(origin));
+
+const allowedOrigins = new Set([
+  ...configuredOrigins,
   "http://localhost:5173",
   "https://4muslims.vercel.app",
-].filter(Boolean) as string[];
+]);
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     // Allow non-browser requests (like mobile apps, curl, or Postman) or matching origins
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.has(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS policy blocked request from origin: ${origin}`));
@@ -49,6 +55,17 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "healthy" });
 });
 
+app.use(async (_req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    console.error("Database connection failed:", error);
+    res.status(503).json({ success: false, message: "Database unavailable" });
+  }
+});
+
+app.use("/api/v1/cron", cronRoutes);
 app.use("/api/v1/admin", Admin);
 app.use("/api/v1/public", Public);
 app.use("/api/v1/auth", UserAuth);
@@ -56,22 +73,4 @@ app.use("/api/v1/profile", UserProfile);
 app.use("/api/v1/videos", VideoRoutes);
 app.use("/api/v1/payments", paymentRoutes);
 
-const startServer = async () => {
-  try {
-    await clearAllTempDirs();
-    await connectDB();
-
-    await import("./workers/videoRender.worker.ts");
-    await import("./workers/autopostcron.worker.ts");
-    await import("./workers/storageCleanup.worker.ts");
-
-    app.listen(PORT, () => {
-      console.log(`Server is up and running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error("Fatal: failed to start server", error);
-    process.exit(1);
-  }
-};
-
-startServer();
+export default app;

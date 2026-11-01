@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/app.ts",
-    "start": "node --max-old-space-size=320 --expose-gc --import tsx src/app.ts",
+    "dev": "nodemon --exec tsx src/server.ts",
+    "start": "node --max-old-space-size=320 --expose-gc --import tsx src/server.ts",
     "worker": "node --max-old-space-size=320 --expose-gc --import tsx src/workers/videoRender.worker.ts"
   },
   "keywords": [],
@@ -36,7 +36,6 @@
     "mongoose": "^9.9.1",
     "multer": "^2.2.0",
     "music-metadata": "^11.15.0",
-    "node-cron": "^4.6.0",
     "nodemailer": "^8.0.11",
     "nodemon": "^3.1.14",
     "resend": "^6.18.0",
