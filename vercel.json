@@ -9,7 +9,7 @@
   "crons": [
     {
       "path": "/api/v1/cron/auto-post",
-      "schedule": "19 13 * * *"
+      "schedule": "30 13 * * *"
     },
     {
       "path": "/api/v1/cron/storage-cleanup",
