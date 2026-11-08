@@ -11,7 +11,7 @@ Do not run the worker from the Vercel function or use Vercel's filesystem for pe
 
 1. Import the repository into Vercel with the repository root as the project root.
 2. Add the API environment variables listed below in the Vercel project settings. Add them to Production and Preview only where those environments should have access.
-3. Deploy. `vercel.json` builds `src/app.ts` as the Express function and rewrites all paths to it.
+3. Deploy. Vercel detects the exported Express app in `src/app.ts` and serves it as a function. `vercel.json` explicitly includes the TypeScript source modules required by its runtime imports.
 4. Verify `https://<deployment-domain>/health` returns `200`.
 5. Vercel Cron calls the two protected endpoints configured in `vercel.json`. Cron schedules are UTC and are available on production deployments. Configure `CRON_SECRET` in Vercel so cron invocations carry the corresponding bearer token.
 
