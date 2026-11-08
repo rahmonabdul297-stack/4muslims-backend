@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { enqueueJob, STORAGE_CLEANUP_JOB } from "../../jobs/job-queue.ts";
 import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
 
 /**
@@ -31,11 +32,9 @@ export const getStorageStats = async (req: Request, res: Response) => {
  */
 export const triggerStorageCleanup = async (req: Request, res: Response) => {
   try {
-    const { agenda, STORAGE_CLEANUP_JOB } =
-      await import("../../queues/videorender.ts");
-    const job = await agenda.now(STORAGE_CLEANUP_JOB, {});
+    const job = await enqueueJob(STORAGE_CLEANUP_JOB, {});
     return sendSuccessResponse(res, "Storage cleanup has been queued", {
-      jobId: String(job.attrs._id),
+      jobId: String(job._id),
     });
   } catch (error) {
     return sendErrorResponse(

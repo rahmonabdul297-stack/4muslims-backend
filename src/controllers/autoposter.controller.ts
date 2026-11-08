@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { User } from "../models/User.ts";
 import { PLAN_CONFIGS } from "../config/plan.config.ts";
 import { findReciterConfig } from "../config/reciters.ts";
+import { enqueueJob, AUTOPOST_JOB } from "../jobs/job-queue.ts";
 export const updateAutoPostSettings = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).id;
@@ -146,14 +147,15 @@ export const triggerQuranAutoPost = async (req: Request, res: Response) => {
       });
     }
 
-    // Rendering + publishing happens off-request, in the Agenda worker
-    const { agenda, AUTOPOST_JOB } = await import("../queues/videorender.ts");
-    const job = await agenda.now(AUTOPOST_JOB, { userId: String(user._id) });
+    // Rendering and publishing are picked up by the serverless queue processor.
+    const job = await enqueueJob(AUTOPOST_JOB, {
+      userId: String(user._id),
+    });
 
     return res.status(202).json({
       success: true,
       message: "Auto-post has been queued and will run in the background.",
-      data: { jobId: String(job.attrs._id) },
+      data: { jobId: String(job._id) },
     });
   } catch (error: any) {
     console.error("Auto Post Error:", error?.response?.data || error.message);

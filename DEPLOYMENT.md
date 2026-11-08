@@ -1,54 +1,62 @@
-# Production deployment
+# Vercel deployment
 
-This repository uses two runtimes that share the same source and MongoDB:
+The Express API, queue storage, and job execution all run as Vercel Functions. MongoDB stores queued jobs durably. A function invocation claims one job, performs it, then records completion or schedules a bounded retry. No persistent worker host is required.
 
-- **Vercel** runs the stateless Express API and its short cron-trigger endpoints.
-- **A persistent Node worker** runs Agenda, FFmpeg video rendering, auto-post publishing, and storage cleanup.
-
-Do not run the worker from the Vercel function or use Vercel's filesystem for persistent media. The worker uses local temporary files only while processing a job; completed media is stored in Cloudinary.
-
-## Deploy the API to Vercel
+## Deploy the API
 
 1. Import the repository into Vercel with the repository root as the project root.
-2. Add the API environment variables listed below in the Vercel project settings. Add them to Production and Preview only where those environments should have access.
-3. Deploy. Vercel detects the exported Express app in `src/app.ts` and serves it as a function. `vercel.json` explicitly includes the TypeScript source modules required by its runtime imports.
-4. Verify `https://<deployment-domain>/health` returns `200`.
-5. Vercel Cron calls the two protected endpoints configured in `vercel.json`. Cron schedules are UTC and are available on production deployments. Configure `CRON_SECRET` in Vercel so cron invocations carry the corresponding bearer token.
+2. Select Node.js 22.x.
+3. Configure the environment variables listed below.
+4. Deploy and verify `https://<deployment-domain>/health` returns `200`.
 
-The health endpoint intentionally does not require MongoDB. API routes connect to MongoDB through request middleware and reuse the warm process connection.
+The function is configured for a maximum duration of 300 seconds. A video job must complete within that limit and fit Vercel's memory and bundle limits. This architecture is best effort for short renders; it does not make Vercel an unlimited FFmpeg worker. A timeout is recovered through the job lease/retry mechanism, but a render that repeatedly exceeds the limit will end in a failed job.
 
-## Run the background worker
+## Process queued jobs
 
-The worker must be kept running by a service that supports long-lived Node processes. The included Dockerfile can be used on Render, Railway, Fly.io, or another container host:
+Vercel Hobby cron jobs can run only once per day, so the repository includes a free GitHub Actions scheduler at `.github/workflows/process-vercel-jobs.yml` to call the Vercel processor endpoint every five minutes. GitHub scheduled workflows are best effort and can be delayed.
 
-1. Create a worker/background service from this repository and use the repository root as its build context.
-2. Build with `Dockerfile` and provide the same MongoDB and Cloudinary environment variables as the API, plus the credentials required for Quran content and social publishing.
-3. Start the container; its default command is `npm run worker`.
-4. Keep at least one worker instance running. It polls Agenda jobs stored in MongoDB.
+In the GitHub repository settings, add:
 
-For a non-Docker Node service, use Node 22, install from `package-lock.json`, and set the start command to `npm run worker`.
+- **Variable** `VERCEL_API_URL`: the base production URL, e.g. `https://your-project.vercel.app` (no trailing slash).
+- **Secret** `CRON_SECRET`: exactly the same random secret configured in Vercel.
 
-For local development, run `npm run dev` for the API and `npm run dev:worker` in a second terminal if you need to process queued jobs.
+The workflow processes one queued job per call. You can manually run it from GitHub Actions with **Run workflow**. The protected endpoint can also be called directly:
 
-The API's `/api/v1/videos/triggerautopost` and Vercel cron endpoints enqueue Agenda jobs. They return after queueing; the persistent worker performs rendering, uploads, and publishing.
+```text
+GET https://<deployment-domain>/api/v1/cron/process-jobs
+Authorization: Bearer <CRON_SECRET>
+```
+
+Job enqueue endpoints return a job ID. Check queue job state using:
+
+```text
+GET https://<deployment-domain>/api/v1/cron/jobs/<job-id>
+Authorization: Bearer <CRON_SECRET>
+```
+
+The daily Vercel Cron endpoint `/api/v1/cron/auto-post` enqueues one auto-post job per eligible user. `/api/v1/cron/storage-cleanup` enqueues cleanup. The GitHub workflow processes those jobs. User-triggered custom video and auto-post endpoints also enqueue work.
 
 ## Environment variables
 
-Copy `.env.example` as a reference only; never commit real secrets. Variables used by both runtimes:
+Configure these in Vercel. Add each external integration's credentials only if that feature is enabled:
 
-- Required: `LIVE_MONGODB_URI`, `CLOUD_NAME`, `CLOUD_API_KEY`, `CLOUD_API_SECRET`
-- Worker features: `RENDER_TIMEOUT_MS`, `QURAN_AUDIO_BITRATE`
-- For publishing, configure OAuth credentials and redirect URIs for the enabled providers: Google, Facebook, TikTok, and YouTube
-- For enabled integrations, configure `PAYSTACK_SECRET_KEY`, the email variables, and Twilio variables as needed
+- Database and media: `LIVE_MONGODB_URI`, `CLOUD_NAME`, `CLOUD_API_KEY`, `CLOUD_API_SECRET`
+- Auth and cron: `JWT_USER_SECRET`, `REFRESH_TOKEN_SECRET`, `CRON_SECRET`
+- CORS: `FRONTEND_URL`, optional comma-separated `FRONTEND_URLS`
+- Email: `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_USER`, `EMAIL_PASS`
+- Google OAuth: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`
+- Facebook OAuth: `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `FACEBOOK_REDIRECT_URI`
+- TikTok OAuth: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_REDIRECT_URI`
+- YouTube OAuth: `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REDIRECT_URI`
+- Payment and SMS: `PAYSTACK_SECRET_KEY`, `TWILIO_ACC_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NO`
+- Optional rendering: `RENDER_TIMEOUT_MS`, `QURAN_AUDIO_BITRATE`
 
-Vercel API variables:
+Set `FRONTEND_URL` to an exact origin (scheme and hostname, no path or trailing slash). Never expose secrets as frontend `VITE_*` variables or commit them to Git.
 
-- Required for authentication: `JWT_USER_SECRET`, `REFRESH_TOKEN_SECRET`
-- Required for scheduled requests: `CRON_SECRET`
-- CORS: `FRONTEND_URL`, and optionally comma-separated `FRONTEND_URLS`
+## Operational limits
 
-Set `FRONTEND_URL` to the exact production origin, without a path or trailing slash. Keep `CRON_SECRET` and provider credentials private and never expose them as frontend `VITE_*` variables.
-
-## Upload constraints
-
-Vercel Functions have request-size, execution-time, and temporary-storage limits. Do not send large video uploads through the Vercel API. For large admin media, upload directly to Cloudinary using a server-generated signed upload or use a separate upload service. The included temporary-directory handling uses the runtime's temporary directory and does not provide persistent storage.
+- One job is processed per invocation; the queue uses an atomic MongoDB claim and one global processor lease to avoid concurrent FFmpeg executions.
+- Jobs retry up to three attempts with backoff. Check job state and Vercel Function logs to diagnose failures.
+- GitHub Actions' five-minute schedule is not an exact SLA. For lower latency, use the manual workflow dispatch or call the protected processor endpoint.
+- Upload large source videos directly to Cloudinary rather than proxying them through a Vercel function.
+- Do not use the development-only `npm run worker:local` concurrently with production queue processing.

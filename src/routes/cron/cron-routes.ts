@@ -1,5 +1,12 @@
 import { Router } from "express";
 import { User } from "../../models/User.ts";
+import {
+  AUTOPOST_JOB,
+  enqueueJob,
+  getQueueJobStatus,
+  processNextJob,
+  STORAGE_CLEANUP_JOB,
+} from "../../jobs/job-queue.ts";
 
 const router = Router();
 
@@ -22,7 +29,6 @@ router.use((req, res, next) => {
 
 router.get("/auto-post", async (_req, res) => {
   try {
-    const { agenda, AUTOPOST_JOB } = await import("../../queues/videorender.ts");
     const users = await User.find({
       "autoPostSettings.enabled": true,
       subscriptionStatus: "active",
@@ -33,7 +39,7 @@ router.get("/auto-post", async (_req, res) => {
 
     for (const user of users) {
       try {
-        await agenda.now(AUTOPOST_JOB, { userId: String(user._id) });
+        await enqueueJob(AUTOPOST_JOB, { userId: String(user._id) });
         enqueuedCount++;
       } catch (error) {
         console.error(
@@ -59,13 +65,11 @@ router.get("/auto-post", async (_req, res) => {
 
 router.get("/storage-cleanup", async (_req, res) => {
   try {
-    const { agenda, STORAGE_CLEANUP_JOB } =
-      await import("../../queues/videorender.ts");
-    const job = await agenda.now(STORAGE_CLEANUP_JOB, {});
+    const job = await enqueueJob(STORAGE_CLEANUP_JOB, {});
     res.status(202).json({
       success: true,
       message: "Storage cleanup has been queued.",
-      jobId: String(job.attrs._id),
+      jobId: String(job._id),
     });
   } catch (error) {
     console.error("[storageCleanup] Failed to enqueue cleanup:", error);
@@ -73,6 +77,36 @@ router.get("/storage-cleanup", async (_req, res) => {
       success: false,
       message: "Storage cleanup could not be queued",
     });
+  }
+});
+
+router.get("/process-jobs", async (_req, res) => {
+  try {
+    const result = await processNextJob();
+    res.status(result.processed && !result.success ? 500 : 200).json({
+      success: !result.processed || result.success,
+      ...result,
+    });
+  } catch (error) {
+    console.error("[jobQueue] Failed to process queued job:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to process queued job",
+    });
+  }
+});
+
+router.get("/jobs/:jobId", async (req, res) => {
+  try {
+    const job = await getQueueJobStatus(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ success: false, message: "Job not found" });
+      return;
+    }
+    res.status(200).json({ success: true, data: job });
+  } catch (error) {
+    console.error("[jobQueue] Failed to read job status:", error);
+    res.status(500).json({ success: false, message: "Could not read job status" });
   }
 });
 

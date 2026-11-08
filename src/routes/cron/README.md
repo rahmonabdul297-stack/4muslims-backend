@@ -1,6 +1,6 @@
 # Scheduled tasks
 
-See the root [deployment guide](../../../DEPLOYMENT.md) for the API/worker split and environment setup.
+See the root [deployment guide](../../../DEPLOYMENT.md) for the Vercel queue processor and environment setup.
 
 Vercel Cron invokes the protected endpoints configured in `vercel.json`:
 
@@ -9,4 +9,4 @@ Vercel Cron invokes the protected endpoints configured in `vercel.json`:
 
 Set `CRON_SECRET` in the Vercel project environment. Vercel sends it as a bearer token in the `Authorization` header for cron invocations.
 
-Video rendering and storage cleanup are not run inside the serverless API. Run `npm run worker` as a persistent worker service with the same MongoDB and third-party credentials.
+Hobby cron is limited to once daily. The GitHub Actions workflow calls `/process-jobs` every five minutes to process one queued job per invocation; configure the workflow's `VERCEL_API_URL` variable and `CRON_SECRET` secret in GitHub.

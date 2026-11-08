@@ -1,0 +1,40 @@
+name: Process Vercel queue jobs
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: process-vercel-queue
+  cancel-in-progress: false
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Process one queued job
+        env:
+          VERCEL_API_URL: ${{ vars.VERCEL_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$VERCEL_API_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Configure VERCEL_API_URL and CRON_SECRET in GitHub Actions settings."
+            exit 1
+          fi
+
+          case "$VERCEL_API_URL" in
+            https://*) ;;
+            *)
+              echo "VERCEL_API_URL must use https://"
+              exit 1
+              ;;
+          esac
+
+          curl --fail-with-body --silent --show-error --max-time 310 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$VERCEL_API_URL/api/v1/cron/process-jobs"

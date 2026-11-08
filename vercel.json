@@ -3,13 +3,14 @@
   "version": 2,
   "functions": {
     "src/app.ts": {
+      "maxDuration": 300,
       "includeFiles": "src/**/*.ts"
     }
   },
   "crons": [
     {
       "path": "/api/v1/cron/auto-post",
-      "schedule": "30 13 * * *"
+      "schedule": "10 15 * * *"
     },
     {
       "path": "/api/v1/cron/storage-cleanup",

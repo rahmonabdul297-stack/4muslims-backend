@@ -3,6 +3,7 @@ import axios from "axios";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 import { Video } from "../models/videotemp.ts";
+import { enqueueJob, VIDEO_RENDER_JOB } from "../jobs/job-queue.ts";
 import {
   buildQuranAudioUrl,
   getGlobalAyahNumber,
@@ -196,10 +197,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
 
     let job;
     try {
-      // Queue rendering job with plan settings passed through
-      const { agenda, VIDEO_RENDER_JOB } =
-        await import("../queues/videorender.ts");
-      job = await agenda.now(VIDEO_RENDER_JOB, {
+      job = await enqueueJob(VIDEO_RENDER_JOB, {
         mongoRenderId: generated._id.toString(),
         userId,
         templateId,
@@ -212,8 +210,6 @@ const generateCustomVideo = async (req: Request, res: Response) => {
         globalAyahNumber,
         surahName,
         reciterId,
-        skipAutoPost: true, // Prevents Agenda background job worker from executing social media posting step
-        // Pass plan enforcement properties to the Agenda worker / FFmpeg process
         planConfig: {
           hasWatermark: planConfig.hasWatermark,
           preset: planConfig.preset,
@@ -240,13 +236,8 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       );
     }
 
-    if (!job?.attrs?._id) {
-      await GeneratedVideo.findByIdAndDelete(generated._id);
-      return sendErrorResponse(res, "Failed to dispatch rendering job.", 500);
-    }
-
     // Save job ID and increment the user's manual generations count
-    generated.jobId = String(job.attrs._id);
+    generated.jobId = String(job._id);
     await generated.save();
 
     user.monthlyUsage.manualGenerationsCount += 1;
@@ -256,7 +247,7 @@ const generateCustomVideo = async (req: Request, res: Response) => {
       success: true,
       message: "Video rendering task queued successfully",
       data: {
-        jobId: String(job.attrs._id),
+        jobId: String(job._id),
         renderId: generated._id,
         status: "pending",
         usage: {
