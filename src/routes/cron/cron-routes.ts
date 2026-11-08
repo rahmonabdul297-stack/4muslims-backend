@@ -1,6 +1,4 @@
 import { Router } from "express";
-import { agenda, AUTOPOST_JOB } from "../../queues/videorender.ts";
-import { cleanupOldGeneratedVideos } from "../../services/storageCleanup.service.ts";
 import { User } from "../../models/User.ts";
 
 const router = Router();
@@ -24,6 +22,7 @@ router.use((req, res, next) => {
 
 router.get("/auto-post", async (_req, res) => {
   try {
+    const { agenda, AUTOPOST_JOB } = await import("../../queues/videorender.ts");
     const users = await User.find({
       "autoPostSettings.enabled": true,
       subscriptionStatus: "active",
@@ -60,18 +59,20 @@ router.get("/auto-post", async (_req, res) => {
 
 router.get("/storage-cleanup", async (_req, res) => {
   try {
-    const result = await cleanupOldGeneratedVideos();
-    const success = result.failedCount === 0 && result.errors.length === 0;
-
-    res.status(success ? 200 : 500).json({
-      success,
-      deletedCount: result.deletedCount,
-      failedCount: result.failedCount,
-      errors: result.errors,
+    const { agenda, STORAGE_CLEANUP_JOB } =
+      await import("../../queues/videorender.ts");
+    const job = await agenda.now(STORAGE_CLEANUP_JOB, {});
+    res.status(202).json({
+      success: true,
+      message: "Storage cleanup has been queued.",
+      jobId: String(job.attrs._id),
     });
   } catch (error) {
-    console.error("[storageCleanup] Scheduled cleanup failed:", error);
-    res.status(500).json({ success: false, message: "Storage cleanup failed" });
+    console.error("[storageCleanup] Failed to enqueue cleanup:", error);
+    res.status(500).json({
+      success: false,
+      message: "Storage cleanup could not be queued",
+    });
   }
 });
 

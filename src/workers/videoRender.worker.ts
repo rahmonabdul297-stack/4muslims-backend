@@ -7,7 +7,12 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 import type { Job } from "agenda";
 import { exponential } from "agenda";
 import type { VideoRenderJobData } from "../types/videoRenderJob.types.ts";
-import { agenda, VIDEO_RENDER_JOB } from "../queues/videorender.ts";
+import {
+  agenda,
+  AUTOPOST_JOB,
+  STORAGE_CLEANUP_JOB,
+  VIDEO_RENDER_JOB,
+} from "../queues/videorender.ts";
 import { findReciterConfig } from "../config/reciters.ts";
 import { renderQuranOverlay } from "../services/quranOverlay.service.ts";
 import { clearJobTempDir } from "../utils/tempDir.ts";
@@ -172,9 +177,7 @@ const initWorker = async () => {
     },
   );
 
-  const { executeAutoPostForUser } =
-    await import("../controllers/autoposter.controller.ts");
-  const { AUTOPOST_JOB } = await import("../queues/videorender.ts");
+  const { executeAutoPostForUser } = await import("../jobs/autopost.job.ts");
 
   agenda.define<{ userId: string }>(
     AUTOPOST_JOB,
@@ -196,6 +199,20 @@ const initWorker = async () => {
     console.error(
       `[autopost] Job failed permanently for user ${userId}:`,
       error,
+    );
+  });
+
+  agenda.define(STORAGE_CLEANUP_JOB, async () => {
+    const { cleanupOldGeneratedVideos } =
+      await import("../services/storageCleanup.service.ts");
+    const result = await cleanupOldGeneratedVideos();
+    if (result.failedCount > 0 || result.errors.length > 0) {
+      throw new Error(
+        `Storage cleanup completed with ${result.failedCount} failure(s): ${result.errors.join("; ")}`,
+      );
+    }
+    console.log(
+      `[storageCleanupWorker] Deleted ${result.deletedCount} generated video(s).`,
     );
   });
 

@@ -2,13 +2,17 @@
   "name": "4muslims",
   "version": "1.0.0",
   "description": "",
+  "engines": {
+    "node": "22.x"
+  },
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon --exec tsx src/server.ts",
+    "dev:worker": "nodemon --exec tsx src/worker.ts",
     "start": "node --max-old-space-size=320 --expose-gc --import tsx src/server.ts",
-    "worker": "node --max-old-space-size=320 --expose-gc --import tsx src/workers/videoRender.worker.ts"
+    "worker": "node --expose-gc --import tsx src/worker.ts"
   },
   "keywords": [],
   "author": "",

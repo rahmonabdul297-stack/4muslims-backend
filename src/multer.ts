@@ -2,9 +2,9 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import os from "os";
 
-// Create temporary upload directory
-const uploadDir = path.join(process.cwd(), "tmp_uploads");
+const uploadDir = path.join(os.tmpdir(), "4muslims", "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }

@@ -19,7 +19,10 @@ const connectDB = async (): Promise<void> => {
 
   if (!connectionPromise) {
     connectionPromise = mongoose
-      .connect(mongoURI)
+      .connect(mongoURI, {
+        maxPoolSize: 10,
+        serverSelectionTimeoutMS: 10000,
+      })
       .then((connection) => {
         console.log(`DB connected: host ${connection.connection.host}`);
         return connection;

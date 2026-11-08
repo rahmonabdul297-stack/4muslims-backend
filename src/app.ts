@@ -1,5 +1,4 @@
 import "dotenv/config";
-import dns from "dns";
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -11,8 +10,6 @@ import VideoRoutes from "./routes/video-routes.ts";
 import paymentRoutes from "./routes/payment/payment-route.ts";
 import connectDB from "./db/index.ts";
 import cronRoutes from "./routes/cron/cron-routes.ts";
-
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
 
 const app = express();
 

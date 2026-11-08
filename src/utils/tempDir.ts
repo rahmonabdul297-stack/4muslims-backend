@@ -1,5 +1,8 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
+
+const jobTempRoot = path.join(os.tmpdir(), "4muslims", "jobs");
 
 // Strip anything but safe path segment characters to block traversal via job ids
 const sanitizeJobId = (jobId: string): string => {
@@ -13,7 +16,7 @@ const sanitizeJobId = (jobId: string): string => {
 };
 
 export const getJobTempDir = (jobId: string): string => {
-  return path.join(process.cwd(), "tmp", sanitizeJobId(jobId));
+  return path.join(jobTempRoot, sanitizeJobId(jobId));
 };
 
 export const ensureJobTempDir = async (jobId: string): Promise<string> => {
@@ -30,13 +33,10 @@ export const clearJobTempDir = async (jobId: string): Promise<void> => {
 };
 
 /**
- * Empty leftover scratch/upload directories on boot (e.g. files stranded by a
- * crashed job) so disk usage doesn't accumulate across restarts/deploys.
+ * Empty only this app's job scratch directory when its persistent worker starts.
  */
 export const clearAllTempDirs = async (): Promise<void> => {
-  const dirs = ["tmp", "tmp_uploads"].map((name) =>
-    path.join(process.cwd(), name),
-  );
+  const dirs = [jobTempRoot];
 
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;

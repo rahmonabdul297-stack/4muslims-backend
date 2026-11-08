@@ -1,8 +1,4 @@
 import type { Request, Response } from "express";
-import {
-  cleanupOldGeneratedVideos,
-  getStorageUsageSummary,
-} from "../../services/storageCleanup.service.ts";
 import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
 
 /**
@@ -11,6 +7,8 @@ import { sendErrorResponse, sendSuccessResponse } from "../../utils/helper.ts";
  */
 export const getStorageStats = async (req: Request, res: Response) => {
   try {
+    const { getStorageUsageSummary } =
+      await import("../../services/storageCleanup.service.ts");
     const stats = await getStorageUsageSummary();
 
     return sendSuccessResponse(
@@ -33,21 +31,16 @@ export const getStorageStats = async (req: Request, res: Response) => {
  */
 export const triggerStorageCleanup = async (req: Request, res: Response) => {
   try {
-    const result = await cleanupOldGeneratedVideos();
-
-    if (result.errors.length > 0) {
-      return sendSuccessResponse(res, "Cleanup completed with errors", result);
-    }
-
-    return sendSuccessResponse(
-      res,
-      `Successfully deleted ${result.deletedCount} old videos`,
-      result,
-    );
+    const { agenda, STORAGE_CLEANUP_JOB } =
+      await import("../../queues/videorender.ts");
+    const job = await agenda.now(STORAGE_CLEANUP_JOB, {});
+    return sendSuccessResponse(res, "Storage cleanup has been queued", {
+      jobId: String(job.attrs._id),
+    });
   } catch (error) {
     return sendErrorResponse(
       res,
-      `Storage cleanup failed: ${(error as Error).message}`,
+      `Storage cleanup could not be queued: ${(error as Error).message}`,
       500,
     );
   }

@@ -1,6 +1,3 @@
-import dotenv from "dotenv";
-dotenv.config();
-
 import cloud, { type UploadApiResponse } from "cloudinary";
 import fs from "fs";
 import type {
@@ -32,13 +29,12 @@ const applyCloudinaryConfig = () => {
   });
 };
 
-applyCloudinaryConfig();
-
 const cloudinaryUploader = (
   fileBuffer: Buffer,
   folderName: string,
   resourceType: "auto" | "image" | "video" = "auto",
 ): Promise<CloudinaryUploadResponse> => {
+  applyCloudinaryConfig();
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       { folder: folderName, resource_type: resourceType, timeout: 120000 },
@@ -80,6 +76,7 @@ export const uploadImageFromPath = (
   filePath: string,
   folderName: string,
 ): Promise<UploadApiResponse> => {
+  applyCloudinaryConfig();
   return new Promise((resolve, reject) => {
     if (!filePath || !fs.existsSync(filePath)) {
       return reject(new Error(`Image file not found at path: ${filePath}`));
@@ -107,6 +104,7 @@ export const uploadVideoToCloudinary = (
   filePath: string,
   folderName: string,
 ): Promise<UploadApiResponse> => {
+  applyCloudinaryConfig();
   return new Promise((resolve, reject) => {
     if (!filePath || !fs.existsSync(filePath)) {
       return reject(
@@ -154,6 +152,7 @@ export const uploadVideoToCloudinary = (
 };
 
 const cloudinaryDestroyer = (publicId: string): Promise<any> => {
+  applyCloudinaryConfig();
   return new Promise((resolve, reject) => {
     cloudinary.uploader.destroy(publicId, (error, result) => {
       if (error) return reject(error);
@@ -166,6 +165,7 @@ const uploadMultipleImagesToCloudinary = async (
   files: Express.Multer.File[],
   folder: string,
 ): Promise<CloudinaryUploadResult[]> => {
+  applyCloudinaryConfig();
   const uploadPromises = files.map((file) => {
     return new Promise<CloudinaryUploadResult>((resolve, reject) => {
       if (!file.buffer) {
@@ -224,6 +224,7 @@ export const uploadMultipleVideosToCloudinary = async (
   files: Express.Multer.File[],
   folder: string,
 ): Promise<CloudinaryVideoUploadResult[]> => {
+  applyCloudinaryConfig();
   const results: CloudinaryVideoUploadResult[] = [];
 
   for (const file of files) {
@@ -314,6 +315,7 @@ export const uploadMultipleVideosToCloudinary = async (
 };
 
 const deleteImageFromCloudinary = async (public_id: string): Promise<any> => {
+  applyCloudinaryConfig();
   try {
     const result = await cloudinary.uploader.destroy(public_id);
     if (result.result === "not found") {

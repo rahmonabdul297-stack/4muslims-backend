@@ -5,6 +5,7 @@ import type { VideoRenderJobData } from "../types/videoRenderJob.types.ts";
 
 export const VIDEO_RENDER_JOB = "render-video";
 export const AUTOPOST_JOB = "autopost-user";
+export const STORAGE_CLEANUP_JOB = "storage-cleanup";
 
 export interface AutoPostJobData {
   userId: string;

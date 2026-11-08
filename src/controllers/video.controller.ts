@@ -3,7 +3,6 @@ import axios from "axios";
 import { sendErrorResponse, sendSuccessResponse } from "../utils/helper.ts";
 import { GeneratedVideo } from "../models/generatevideo.ts";
 import { Video } from "../models/videotemp.ts";
-import { agenda, VIDEO_RENDER_JOB } from "../queues/videorender.ts";
 import {
   buildQuranAudioUrl,
   getGlobalAyahNumber,
@@ -198,6 +197,8 @@ const generateCustomVideo = async (req: Request, res: Response) => {
     let job;
     try {
       // Queue rendering job with plan settings passed through
+      const { agenda, VIDEO_RENDER_JOB } =
+        await import("../queues/videorender.ts");
       job = await agenda.now(VIDEO_RENDER_JOB, {
         mongoRenderId: generated._id.toString(),
         userId,
