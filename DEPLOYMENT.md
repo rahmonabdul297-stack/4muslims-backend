@@ -59,4 +59,5 @@ Set `FRONTEND_URL` to an exact origin (scheme and hostname, no path or trailing 
 - Jobs retry up to three attempts with backoff. Check job state and Vercel Function logs to diagnose failures.
 - GitHub Actions' five-minute schedule is not an exact SLA. For lower latency, use the manual workflow dispatch or call the protected processor endpoint.
 - Upload large source videos directly to Cloudinary rather than proxying them through a Vercel function.
-- Do not use the development-only `npm run worker:local` concurrently with production queue processing.
+- `npm run dev` starts the API and local queue worker together. The standalone `npm run worker:local` command is available when you need to run the worker separately.
+- Avoid running a separate local worker while also processing jobs with the Vercel endpoint during development.

@@ -114,7 +114,8 @@ const claimNextJob = async () => {
     .select("payload")
     .lean();
 
-  await QueueJobModel.updateMany(exhaustedJobFilter,
+  await QueueJobModel.updateMany(
+    exhaustedJobFilter,
     {
       $set: { status: "failed", lastError: "Job exceeded retry limit." },
       $unset: { lockToken: "", lockedAt: "" },
@@ -156,7 +157,7 @@ const claimNextJob = async () => {
       },
       $inc: { attempts: 1 },
     },
-    { new: true, sort: { createdAt: 1 } },
+    { returnDocument: "after", sort: { createdAt: 1 } },
   );
 };
 
@@ -175,7 +176,7 @@ const acquireProcessorLock = async (): Promise<string | undefined> => {
         ],
       },
       { $set: { lockedAt: now, lockToken } },
-      { new: true, upsert: true },
+      { returnDocument: "after", upsert: true },
     );
     return lock?.lockToken === lockToken ? lockToken : undefined;
   } catch (error) {

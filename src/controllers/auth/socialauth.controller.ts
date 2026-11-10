@@ -173,7 +173,7 @@ export const tiktokCallback = async (req: Request, res: Response) => {
           "socialTokens.tiktok.refreshToken": refreshToken,
         },
       },
-      { new: true },
+      { returnDocument: "after" },
     );
     if (!updatedUser) throw new Error("User not found.");
 
@@ -378,7 +378,7 @@ export const facebookCallback = async (req: Request, res: Response) => {
           "socialProfiles.facebook": `https://facebook.com/${page.id}`,
         },
       },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!updatedUser) {
