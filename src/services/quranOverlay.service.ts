@@ -160,7 +160,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Header,Amiri,140,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,1,0,0,0,100,100,2,0,1,2,1,8,40,40,140,1
-Style: Arabic,Amiri,152,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,0,0,0,0,100,100,0,0,1,2,1,2,60,60,500,1
+Style: Arabic,Amiri,152,&H00FFFFFF,&H00000000,&H00000000,&HFF000000,0,0,0,0,100,100,0,0,1,3,1,2,60,60,600,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -308,7 +308,7 @@ const runFfmpegRender = ({
     const escapedAssPath = escapeSubtitlesFilterPath(assPath);
     const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
-    const filterString = `[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[vout]`;
+    const filterString = `[1:a]showwaves=s=960x84:mode=p2p:rate=25:colors=white:scale=sqrt,format=rgb24,colorkey=black:0.05:0.1,format=rgba[wave];[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,drawbox=color=black@0.4:t=fill,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[base];[base][wave]overlay=(W-w)/2:H-h-110:shortest=1[vout]`;
 
     ffmpeg()
       .input(videoPath)
