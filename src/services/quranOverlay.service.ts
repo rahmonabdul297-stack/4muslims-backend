@@ -308,7 +308,7 @@ const runFfmpegRender = ({
     const escapedAssPath = escapeSubtitlesFilterPath(assPath);
     const escapedFontsDir = escapeSubtitlesFilterPath(FONTS_DIR);
 
-    const filterString = `[1:a]showwaves=s=960x84:mode=p2p:rate=8:colors=white:scale=sqrt,fps=25,format=rgb24,colorkey=black:0.05:0.1,format=rgba[wave];[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,drawbox=color=black@0.4:t=fill,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[base];[base][wave]overlay=(W-w)/2:H-h-110:shortest=1[vout]`;
+    const filterString = `[1:a]showwaves=s=960x140:mode=p2p:rate=8:colors=white:scale=sqrt,fps=25,format=rgb24,colorkey=black:0.05:0.1,format=rgba[wave];[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,setsar=1,drawbox=color=black@0.4:t=fill,subtitles='${escapedAssPath}':fontsdir='${escapedFontsDir}'[base];[base][wave]overlay=(W-w)/2:H-h-110:shortest=1[vout]`;
 
     ffmpeg()
       .input(videoPath)
